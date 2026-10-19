@@ -103,6 +103,6 @@ If you omit `initial_conditions`, ~0.05% of each age group is seeded into `Infec
 
 ## Notes
 
-- Compartment names in `initial_percentages` / `compartments` must match the preset's compartment names (e.g. `Susceptible`, `Exposed`, `Infected`, `Recovered`, `Hospitalized` for SEIHR-family presets; `_vax` twins for the vaccination presets).
+- Compartment names in `initial_percentages` / `compartments` must match the preset's compartment names (e.g. `Susceptible`, `Exposed`, `Infected`, `Recovered`, `Hospitalized` for SEIHR-family presets; `_vax` twins for the vaccination presets). An unknown name is rejected with a `422` that lists the model's compartments.
 - For the vaccination presets, the vaccinated branch (`Susceptible_vax`, `Exposed_vax`, …) starts at zero unless you seed it or supply a [`vaccination`](./vaccination/overview.mdx) block.
 - Use [Custom Models](./model/custom-models.mdx) if you need compartments outside the preset list.

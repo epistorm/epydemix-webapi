@@ -144,6 +144,18 @@ Results are organized as quantiles (median, confidence intervals) across simulat
 
 `summary` mirrors that shape without the time dimension. `peaks` is `compartment -> age_group -> {quantiles, peak_date}` and carries the maximum value reached during the simulation window per quantile. `totals` is `transition -> age_group -> {quantiles}` and carries the cumulative number of transition events over the whole window.
 
+### Errors
+
+A successful run returns HTTP `200` with `"status": "completed"`. If a run cannot complete, the API returns an HTTP error with a `detail` message instead:
+
+| Status | When |
+|---|---|
+| `422` | The request is invalid. These checks run before the simulation starts. Examples: a date that is not a real `YYYY-MM-DD` date, an `end_date` before its `start_date`, or an `initial_conditions` compartment that is not in the model. |
+| `504` | Loading a built-in population timed out. Retry the request. |
+| `500` | An unexpected internal error occurred. The details are logged on the server and not returned. |
+
+A simulation needs at least 3 time steps. With the default `dt: 1`, `end_date` must be at least 2 days after `start_date`. The [Python export](./python-exports.mdx) endpoint applies the same input checks.
+
 ## 5. Customizing output
 
 Everything under `output` is optional; sensible defaults cover most cases. You can narrow the response with any combination of:
