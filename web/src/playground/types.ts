@@ -14,10 +14,9 @@ export type SimulationResults = {
 
 export type SimulationResponse = {
   simulation_id: string;
-  status: 'completed' | 'failed';
+  status: 'completed';
   metadata?: unknown;
-  results?: SimulationResults | null;
-  error?: string | null;
+  results: SimulationResults;
 };
 
 export type ShowKind = 'compartment' | 'transition' | 'parameter';
