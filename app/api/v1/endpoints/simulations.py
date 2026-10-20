@@ -25,7 +25,7 @@ SIMULATION_REQUEST_EXAMPLES: dict[str, Example] = {
         value={
             "model": {
                 "preset": "SIR",
-                "parameters": {"transmission_rate": 0.3, "recovery_rate": 0.1},
+                "parameters": {"R0": 2.5, "recovery_rate": 0.1},
             },
             "population": {"name": "United_States"},
             "simulation": {
