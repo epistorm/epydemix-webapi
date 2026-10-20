@@ -155,20 +155,22 @@ Presets accept some parameters in a friendlier form and convert them to the rate
 
 Each preset's Parameters table lists the conversions it accepts. Custom models have no implicit conversions; write the expression yourself as a [calculated parameter](#calculated-parameters).
 
-If you pass both a source and the rate it converts to, the rate you passed is used and the source is dropped. The request still succeeds, and the response includes a [`parameter_overridden` warning](../../warnings.mdx) for each dropped source.
+If you pass both a source and the rate it converts to, the rate you passed is used and the conversion is skipped. The request still succeeds, and the response includes a [`parameter_overridden` warning](../../warnings.mdx) for each ignored source.
 
-| `model.parameters` | Used | Dropped | Warning |
+| `model.parameters` | Used | Ignored | Warning |
 |---|---|---|---|
 | `{"infectious_period": 7}` | `recovery_rate = 1/7` | none | none |
 | `{"recovery_rate": 0.2}` | `recovery_rate = 0.2` | none | none |
 | `{"infectious_period": 7, "recovery_rate": 0.2}` | `recovery_rate = 0.2` | `infectious_period` | `parameter_overridden` |
 | `{"R0": 2.0, "transmission_rate": 0.3}` | `transmission_rate = 0.3` | `R0` | `parameter_overridden` |
+| `{"infectious_period": 7, "recovery_rate": "0.2"}` | `recovery_rate = 0.2` | `infectious_period` | `parameter_overridden` |
+| `{"infectious_period": 7, "recovery_rate": "1 / infectious_period"}` | `recovery_rate = 1/7` | none | none |
 
 A few details:
 
 - Only sources you pass count as a conflict. On a preset whose defaults include a source (for example `R0` on [V-SEIR](../presets/v-seir.mdx)), passing `transmission_rate` replaces the default without a warning.
-- A source passed as an expression (`"R0": "2 * 1.25"`) is still a conflict: the conversion is skipped and you get a warning. The expression itself is still evaluated, so other expressions can reference it.
-- A rate passed as an expression (`"recovery_rate": "1 / infectious_period"`) is used as written. No conversion is injected and no warning is returned, since the expression may use the source.
+- A source passed as an expression (`"R0": "2 * 1.25"`) counts as passed, so the same rules apply. The expression itself is still evaluated, so other expressions can reference it.
+- A rate passed as an expression is used as written. It warns only when the expression does not use the source, either directly or through other calculated parameters: `"recovery_rate": "gamma"` with `"gamma": "1 / infectious_period"` counts as using `infectious_period`.
 - Parameters the preset does not define are accepted without a warning. They can serve as helpers in [calculated parameters](#calculated-parameters), like `gamma` in the example above.
 
 To check the values that actually drove a run, see [Inspecting parameter values in the response](#inspecting-parameter-values-in-the-response).
@@ -207,6 +209,6 @@ Response shape under `results.parameters`:
 - The block is **shared across stochastic runs** since parameters are deterministic inputs: one array per parameter regardless of `Nsim`.
 - Reserved names (e.g. `CONTACT_MATRIX_EIGENVALUE_ALL`) live only in the expression namespace and do not appear here.
 
-- Dropped conversion sources (see [Preset conversions and precedence](#preset-conversions-and-precedence)) do not appear here. Helper parameters do, even when no transition references them, so a name in this block was not necessarily used by a transition.
+- A source ignored because you passed the rate as a number or list (see [Preset conversions and precedence](#preset-conversions-and-precedence)) does not appear here. Helper parameters do, even when no transition references them, so a name in this block was not necessarily used by a transition.
 
 Off by default (`results.parameters` is `null`) because the per-step, per-age arrays add computation and response size. See [Parameter Transforms › Inspecting the effective parameter values](./transformations.mdx#inspecting-the-effective-parameter-values) for a worked example.

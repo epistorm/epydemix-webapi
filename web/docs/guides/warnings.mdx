@@ -39,7 +39,9 @@ The remaining fields depend on the `code`.
 
 ### `parameter_overridden`
 
-You passed both a preset conversion source (such as `infectious_period` or `R0`) and the rate it converts to (such as `recovery_rate` or `transmission_rate`). The rate you passed was used and the source was dropped. One warning is returned per dropped source.
+You passed both a preset conversion source (such as `infectious_period` or `R0`) and the rate it converts to (such as `recovery_rate` or `transmission_rate`). The rate you passed was used and the source was ignored. One warning is returned per ignored source.
+
+If the rate is an expression, the warning is returned only when the expression does not use the source, directly or through other calculated parameters. `"recovery_rate": "0.2"` with `"infectious_period": 7` warns; `"recovery_rate": "1 / infectious_period"` does not.
 
 | Field | Description |
 |---|---|
