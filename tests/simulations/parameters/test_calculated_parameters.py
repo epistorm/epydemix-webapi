@@ -962,6 +962,27 @@ def test_source_override_propagates_through_calc_param(client):
             },
             [("hosp_duration", "hosp_recovery_rate"), ("R0", "transmission_rate")],
         ),
+        # Derived as an expression that does not use the source.
+        (
+            "SEIR",
+            {"recovery_rate": "0.2", "infectious_period": 7.0},
+            [("infectious_period", "recovery_rate")],
+        ),
+        (
+            "SEIR",
+            {"recovery_rate": "0.2", "infectious_period": "3 + 4"},
+            [("infectious_period", "recovery_rate")],
+        ),
+        (
+            "SIR",
+            {"transmission_rate": "0.1 * recovery_rate", "R0": 2.0, "infectious_period": 7.0},
+            [("R0", "transmission_rate")],
+        ),
+        (
+            "V-SEIHR",
+            {"recovery_rate": "0.4", "infectious_period": 2.5},
+            [("infectious_period", "recovery_rate")],
+        ),
     ],
 )
 def test_parameter_overridden_warning(client, preset, parameters, expected):
@@ -983,6 +1004,19 @@ def test_parameter_overridden_warning(client, preset, parameters, expected):
         ("SIR", {"transmission_rate": 0.3}),
         ("SEIR", {"R0": 2.5, "recovery_rate": 0.1}),
         ("SIR", {"infectious_period": 7.0, "recovery_rate": "1 / infectious_period"}),
+        (
+            "SEIR",
+            {"recovery_rate": "gamma", "gamma": "1 / infectious_period", "infectious_period": 7.0},
+        ),
+        (
+            "V-SEIR",  # chained through the preset's own calc-param name
+            {
+                "transmission_rate_vax": "R0 * 0.01",
+                "transmission_rate": "transmission_rate_vax * 2",
+                "R0": 2.0,
+            },
+        ),
+        ("V-SEIR", {"recovery_rate": "0.4"}),  # source only from preset defaults
         ("V-SEIR", {}),  # preset defaults include R0 and infectious_period
         ("V-SEIR", {"transmission_rate": 0.05, "recovery_rate": 0.4}),  # overrides defaults only
     ],
@@ -1019,3 +1053,18 @@ def test_custom_model_has_no_warnings(client):
     response = client.post("/api/v1/simulations", json=request)
     assert response.status_code == 200, response.text
     assert response.json()["warnings"] == []
+
+
+def test_source_ignored_by_derived_expression_does_not_change_results(client):
+    """A source that the derived expression does not use leaves the trajectories unchanged."""
+    params = {"transmission_rate": 0.3, "recovery_rate": "0.2"}
+    plain = client.post("/api/v1/simulations", json=_preset_request("SEIR", params))
+    conflicting = client.post(
+        "/api/v1/simulations",
+        json=_preset_request("SEIR", {**params, "infectious_period": 3.0}),
+    )
+    assert plain.status_code == conflicting.status_code == 200
+    assert plain.json()["warnings"] == []
+    assert [w["parameter"] for w in conflicting.json()["warnings"]] == ["infectious_period"]
+    for key in ("compartments", "transitions"):
+        assert conflicting.json()["results"][key] == plain.json()["results"][key]
