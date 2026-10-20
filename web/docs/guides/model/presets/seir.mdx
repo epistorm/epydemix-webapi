@@ -26,16 +26,18 @@ The Susceptible-Exposed-Infected-Recovered model. Extends SIR with an exposed (l
 
 ## Parameters
 
-Some parameters can be provided in multiple forms. For example, you can pass `R0` instead of `transmission_rate`, `incubation_period` instead of `incubation_rate`, or `infectious_period` instead of `recovery_rate`, and they are automatically converted. If both forms are supplied, the rate form wins and the source is dropped silently. See [calculated parameters](../parameters/overview.mdx#reserved-names) for the conversion machinery.
+Some parameters can be provided in multiple forms. For example, you can pass `transmission_rate` directly instead of the default `R0`, or a period such as `incubation_period` or `infectious_period` instead of its rate, which is converted automatically. If both forms are supplied, the rate form wins and the source is dropped silently. See [calculated parameters](../parameters/overview.mdx#reserved-names) for the conversion machinery.
 
 | Parameter | Status | Default | Description |
 |---|---|---|---|
-| `transmission_rate` | Default | `0.3` | $\beta$. Per-contact transmission rate. |
-| `R0` | Alternative to `transmission_rate` | unset | Basic reproduction number. When passed, `transmission_rate = R0 * recovery_rate / CONTACT_MATRIX_EIGENVALUE_ALL`. |
+| `R0` | Default | `2.5` | Basic reproduction number. |
+| `transmission_rate` | Alternative to `R0` | derived | $\beta$. Per-contact transmission rate. Default: `R0 * recovery_rate / CONTACT_MATRIX_EIGENVALUE_ALL`. |
 | `incubation_rate` | Default | `0.2` | E &rarr; I rate. |
 | `incubation_period` | Alternative to `incubation_rate` | unset | Days from exposure to infectiousness. When passed, `incubation_rate = 1 / incubation_period`. |
 | `recovery_rate` | Default | `0.1` | I &rarr; R rate. |
 | `infectious_period` | Alternative to `recovery_rate` | unset | Days infectious. When passed, `recovery_rate = 1 / infectious_period`. |
+
+`CONTACT_MATRIX_EIGENVALUE_ALL` is the dominant eigenvalue of the chosen population's contact matrix, summed over layers. With the defaults, R0 stays at 2.5 and $\beta$ depends on the population: about `0.0178` for `United_States` and `0.0181` for `United_States__Vermont`. If you pass `transmission_rate`, it is used as given, so R0 is no longer fixed at 2.5. To see the effective `transmission_rate`, set [`output.include_parameters`](../parameters/overview.mdx#inspecting-parameter-values-in-the-response).
 
 ## Examples
 
