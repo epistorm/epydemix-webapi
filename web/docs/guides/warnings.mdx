@@ -1,0 +1,58 @@
+---
+sidebar_position: 6
+---
+
+# Warnings
+
+A simulation can succeed and still return warnings. Warnings point out parts of the request that the API interpreted differently from how they may have been intended. They never change the results and never turn a request into an error: the response is still HTTP 200 with `status: "completed"`.
+
+## Response format
+
+Every simulation response has a top-level `warnings` array. It is an empty list when there is nothing to report, and it does not depend on any `output` option.
+
+```json
+{
+  "simulation_id": "sim_c9617343b215",
+  "status": "completed",
+  "metadata": { "...": "..." },
+  "results": { "...": "..." },
+  "error": null,
+  "warnings": [
+    {
+      "code": "parameter_overridden",
+      "parameter": "infectious_period",
+      "overridden_by": "recovery_rate",
+      "message": "infectious_period was ignored because recovery_rate was explicitly provided."
+    }
+  ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `code` | Fixed, machine-readable warning type. Use this for programmatic checks. |
+| `message` | Human-readable explanation. The wording may change; do not parse it. |
+
+The remaining fields depend on the `code`.
+
+## Codes
+
+### `parameter_overridden`
+
+You passed both a preset conversion source (such as `infectious_period` or `R0`) and the rate it converts to (such as `recovery_rate` or `transmission_rate`). The rate you passed was used and the source was dropped. One warning is returned per dropped source.
+
+| Field | Description |
+|---|---|
+| `parameter` | The source that was ignored, e.g. `infectious_period`. |
+| `overridden_by` | The rate that was used instead, e.g. `recovery_rate`. |
+
+For example, this SEIR request returns the warning above:
+
+```json
+"parameters": {
+  "infectious_period": 7.0,
+  "recovery_rate": 0.2
+}
+```
+
+To resolve it, keep only the form you mean. Remove `infectious_period` to use `recovery_rate: 0.2`, or remove `recovery_rate` to use `1 / 7`. See [Preset conversions and precedence](./model/parameters/overview.mdx#preset-conversions-and-precedence) for which pairs conflict and how values are chosen.
