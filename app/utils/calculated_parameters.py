@@ -95,6 +95,24 @@ def extract_dependencies(tree: ast.AST) -> set[str]:
     return {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
 
 
+def transitive_dependencies(name: str, expr_params: dict[str, str]) -> set[str]:
+    """Return every name ``expr_params[name]`` references, directly or via other expressions.
+
+    Syntax errors raise ValueError as in ``evaluate_expressions``; other
+    validation (disallowed nodes, undefined names, cycles) is left to it.
+    """
+    seen: set[str] = set()
+    stack = [name]
+    while stack:
+        current = stack.pop()
+        for dep in extract_dependencies(_parse(expr_params[current], current)):
+            if dep not in seen:
+                seen.add(dep)
+                if dep in expr_params:
+                    stack.append(dep)
+    return seen
+
+
 def _topological_order(
     expr_params: dict[str, str],
     deps: dict[str, set[str]],

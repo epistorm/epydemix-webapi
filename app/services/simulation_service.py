@@ -33,7 +33,7 @@ from ..api.v1.schemas.simulation import (
     SimulationWarning,
 )
 from ..presets import PRESETS
-from ..utils.calculated_parameters import RESERVED_NAMES
+from ..utils.calculated_parameters import RESERVED_NAMES, transitive_dependencies
 from ..utils.parameter_conversions import resolve_parameter_conversions
 from .model_service import (
     apply_age_varying_parameters,
@@ -212,6 +212,16 @@ def run_simulation(request: SimulationRequest) -> SimulationResponse:
     converted, overridden = resolve_parameter_conversions(
         model.parameters, user_scalar_names, conversions
     )
+    # User calc-params still win over registry-injected conversions on collision.
+    expr_params = {**converted, **expr_params}
+    # A user expression for the derived also overrides the conversion,
+    # unless it uses the source (directly or through other expressions).
+    overridden += [
+        (conv.source, derived)
+        for derived, conv in conversions.items()
+        if isinstance((request.model.parameters or {}).get(derived), str)
+        and conv.source not in transitive_dependencies(derived, expr_params)
+    ]
     # Warn only when the user supplied the source too (scalar, list, or
     # expression); a source that came from preset defaults is not a conflict.
     warnings = [
@@ -224,8 +234,6 @@ def run_simulation(request: SimulationRequest) -> SimulationResponse:
         for source, derived in overridden
         if source in user_param_names
     ]
-    # User calc-params still win over registry-injected conversions on collision.
-    expr_params = {**converted, **expr_params}
 
     # Apply interventions
     apply_interventions(model, request.interventions)
