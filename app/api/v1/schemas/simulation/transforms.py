@@ -69,6 +69,14 @@ class BalcanTransform(_BaseTransform):
         ),
     )
 
+    @model_validator(mode="after")
+    def _validate_nonzero(self) -> "BalcanTransform":
+        if self.max_value == 0:
+            raise ValueError("'max_value' must not be 0")
+        if self.min_date == self.max_date:
+            raise ValueError("'min_date' must differ from 'max_date' (zero seasonal period)")
+        return self
+
 
 class ScaleTransform(_BaseTransform):
     """Multiplicative scaling applied during a date window.
