@@ -112,6 +112,16 @@ A calculated parameter **can** be the `target_parameter` of a [`parameter_transf
 - Circular dependencies among expressions (`a = "b + 1", b = "a + 1"`) are rejected with a `422`.
 - A reference to an undefined name is rejected with a `422` naming the missing parameter.
 
+### Value checks
+
+These checks run before the simulation starts and return a `422`:
+
+- A period converted to a rate (`infectious_period`, `incubation_period`, `hosp_duration`, `immunity_duration`) must be greater than 0.
+- After expressions and [transforms](./transformations.mdx) are evaluated, every parameter used as a transition rate must be finite and non-negative. Rates above 1 are allowed.
+- Preset probabilities and proportions (`VE_S`, `VE_H`, `hosp_proportion`) must stay between 0 and 1 after evaluation.
+
+Other parameters are not constrained, so helper values used only inside expressions may be negative.
+
 ### Reserved names
 
 Expressions can also reference SCREAMING_SNAKE_CASE constants derived from the model state. User parameters cannot share these names.

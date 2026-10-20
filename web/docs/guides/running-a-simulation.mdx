@@ -166,7 +166,7 @@ A successful run returns HTTP `200` with `"status": "completed"`. If a run canno
 
 | Status | When |
 |---|---|
-| `422` | The request is invalid. These checks run before the simulation starts. Examples: a date that is not a real `YYYY-MM-DD` date, an `end_date` before its `start_date`, or an `initial_conditions` compartment that is not in the model. |
+| `422` | The request is invalid. These checks run before the simulation starts. Examples: a date that is not a real `YYYY-MM-DD` date, an `end_date` before its `start_date`, an `initial_conditions` compartment that is not in the model, an unknown intervention layer, or a transition rate that is negative after evaluation. |
 | `504` | Loading a built-in population timed out. Retry the request. |
 | `500` | An unexpected internal error occurred. The details are logged on the server and not returned. |
 
