@@ -927,3 +927,95 @@ def test_source_override_propagates_through_calc_param(client):
     # `b` is 10.0 during the window (5.0 * 2), and 2.0 outside the window (1.0 * 2)
     assert in_window == pytest.approx([10.0] * len(in_window), abs=1e-9)
     assert out_of_window == pytest.approx([2.0] * len(out_of_window), abs=1e-9)
+
+
+# -- Warnings for conversions skipped by precedence ----------------------------
+
+
+@pytest.mark.parametrize(
+    "preset, parameters, expected",
+    [
+        (
+            "SEIR",
+            {"infectious_period": 7.0, "recovery_rate": 0.2},
+            [("infectious_period", "recovery_rate")],
+        ),
+        ("SEIR", {"R0": 2.0, "transmission_rate": 0.3}, [("R0", "transmission_rate")]),
+        (
+            "SEIR",
+            {"incubation_period": 3.0, "incubation_rate": 0.5},
+            [("incubation_period", "incubation_rate")],
+        ),
+        ("SIR", {"R0": "2 * 1.25", "transmission_rate": 0.3}, [("R0", "transmission_rate")]),
+        (
+            "V-SEIR",
+            {"immunity_duration": 365.0, "waning_rate": 0.01},
+            [("immunity_duration", "waning_rate")],
+        ),
+        (
+            "V-SEIHR",
+            {
+                "R0": 1.8,
+                "transmission_rate": 0.05,
+                "hosp_duration": 5.0,
+                "hosp_recovery_rate": 0.25,
+            },
+            [("hosp_duration", "hosp_recovery_rate"), ("R0", "transmission_rate")],
+        ),
+    ],
+)
+def test_parameter_overridden_warning(client, preset, parameters, expected):
+    """Supplying both a conversion source and its derived rate warns which one was ignored."""
+    response = client.post("/api/v1/simulations", json=_preset_request(preset, parameters))
+    assert response.status_code == 200, response.text
+    warnings = response.json()["warnings"]
+    assert sorted((w["parameter"], w["overridden_by"]) for w in warnings) == sorted(expected)
+    for w in warnings:
+        assert w["code"] == "parameter_overridden"
+        assert w["message"] == (
+            f"{w['parameter']} was ignored because {w['overridden_by']} was explicitly provided."
+        )
+
+
+@pytest.mark.parametrize(
+    "preset, parameters",
+    [
+        ("SIR", {"transmission_rate": 0.3}),
+        ("SEIR", {"R0": 2.5, "recovery_rate": 0.1}),
+        ("SIR", {"infectious_period": 7.0, "recovery_rate": "1 / infectious_period"}),
+        ("V-SEIR", {}),  # preset defaults include R0 and infectious_period
+        ("V-SEIR", {"transmission_rate": 0.05, "recovery_rate": 0.4}),  # overrides defaults only
+    ],
+)
+def test_no_warning_without_user_conflict(client, preset, parameters):
+    """Rate-only inputs, source-only inputs, and preset defaults produce an empty list."""
+    request = _preset_request(preset, parameters)
+    del request["output"]  # warnings do not depend on include_parameters
+    response = client.post("/api/v1/simulations", json=request)
+    assert response.status_code == 200, response.text
+    assert response.json()["warnings"] == []
+
+
+def test_overridden_source_does_not_change_results(client):
+    """Adding the ignored sources leaves the trajectories identical for the same seed."""
+    rates = {"transmission_rate": 0.3, "recovery_rate": 0.2}
+    plain = client.post("/api/v1/simulations", json=_preset_request("SEIR", rates))
+    conflicting = client.post(
+        "/api/v1/simulations",
+        json=_preset_request("SEIR", {**rates, "R0": 5.0, "infectious_period": 3.0}),
+    )
+    assert plain.status_code == conflicting.status_code == 200
+    assert plain.json()["warnings"] == []
+    assert len(conflicting.json()["warnings"]) == 2
+    for key in ("compartments", "transitions"):
+        assert conflicting.json()["results"][key] == plain.json()["results"][key]
+
+
+def test_custom_model_has_no_warnings(client):
+    """Custom models have no conversions, so period and rate together do not warn."""
+    request = _custom_sir_request(
+        {"infectious_period": 7.0, "transmission_rate": 0.3, "recovery_rate": 0.1}
+    )
+    response = client.post("/api/v1/simulations", json=request)
+    assert response.status_code == 200, response.text
+    assert response.json()["warnings"] == []
