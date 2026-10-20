@@ -7,6 +7,7 @@ import sys
 
 import numpy as np
 import pandas as pd
+import pytest
 
 SIMPLE_SIMULATION = {
     "model": {
@@ -149,6 +150,30 @@ def test_export_r0_seasonality_and_scaling_match_api(tmp_path, client):
     assert "def calculate_transmission_rate_from_r0" in source
     assert "def apply_balcan_seasonality" in source
     assert "def apply_parameter_scaling" in source
+    assert "calculate_transmission_rate_from_r0(" in source
+
+
+@pytest.mark.parametrize("preset", ["SIR", "SEIR", "SIS"])
+def test_export_basic_preset_defaults_match_api(preset, tmp_path, client):
+    request = {
+        **SIMPLE_SIMULATION,
+        "model": {"preset": preset},
+        "population": {
+            "source": "custom",
+            "name": "Two groups",
+            "age_groups": {"younger": 800, "older": 200},
+            "contact_matrices": {"all": [[2.0, 1.0], [1.0, 1.5]]},
+        },
+        "simulation": {
+            **SIMPLE_SIMULATION["simulation"],
+            "end_date": "2025-01-10",
+            "Nsim": 3,
+        },
+    }
+
+    source = _assert_export_matches_api(request, tmp_path, client)
+
+    assert "model.add_parameter(parameter_name='R0', value=2.5)" in source
     assert "calculate_transmission_rate_from_r0(" in source
 
 
