@@ -30,6 +30,7 @@ from ..api.v1.schemas.simulation import (
     SimulationRequest,
     SimulationResponse,
     SimulationRunMetadata,
+    SimulationWarning,
 )
 from ..presets import PRESETS
 from ..utils.calculated_parameters import RESERVED_NAMES
@@ -208,7 +209,21 @@ def run_simulation(request: SimulationRequest) -> SimulationResponse:
     user_scalar_names = {
         k for k, v in (request.model.parameters or {}).items() if not isinstance(v, str)
     }
-    converted = resolve_parameter_conversions(model.parameters, user_scalar_names, conversions)
+    converted, overridden = resolve_parameter_conversions(
+        model.parameters, user_scalar_names, conversions
+    )
+    # Warn only when the user supplied the source too (scalar, list, or
+    # expression); a source that came from preset defaults is not a conflict.
+    warnings = [
+        SimulationWarning(
+            code="parameter_overridden",
+            parameter=source,
+            overridden_by=derived,
+            message=f"{source} was ignored because {derived} was explicitly provided.",
+        )
+        for source, derived in overridden
+        if source in user_param_names
+    ]
     # User calc-params still win over registry-injected conversions on collision.
     expr_params = {**converted, **expr_params}
 
@@ -312,4 +327,5 @@ def run_simulation(request: SimulationRequest) -> SimulationResponse:
         status="completed",
         metadata=metadata,
         results=results_data,
+        warnings=warnings,
     )

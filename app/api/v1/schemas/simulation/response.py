@@ -321,6 +321,31 @@ class SimulationMetadata(BaseModel):
     )
 
 
+class SimulationWarning(BaseModel):
+    """Non-fatal notice about how the request was interpreted. Never changes the results."""
+
+    code: Literal["parameter_overridden"] = Field(
+        ...,
+        description=(
+            "Machine-readable warning code. `parameter_overridden`: a preset conversion "
+            "source (e.g. `infectious_period`, `R0`) was ignored because the rate it "
+            "converts to was explicitly provided."
+        ),
+        examples=["parameter_overridden"],
+    )
+    parameter: str = Field(
+        ..., description="Parameter that was ignored.", examples=["infectious_period"]
+    )
+    overridden_by: str = Field(
+        ..., description="Parameter that took precedence.", examples=["recovery_rate"]
+    )
+    message: str = Field(
+        ...,
+        description="Human-readable explanation. Use `code` for programmatic checks.",
+        examples=["infectious_period was ignored because recovery_rate was explicitly provided."],
+    )
+
+
 class SimulationResponse(BaseModel):
     """Complete simulation response."""
 
@@ -339,3 +364,7 @@ class SimulationResponse(BaseModel):
     )
     metadata: SimulationMetadata = Field(..., description="Metadata about the simulation run.")
     results: SimulationResultsData = Field(..., description="Simulation results.")
+    warnings: list[SimulationWarning] = Field(
+        default_factory=list,
+        description="Non-fatal warnings about the request. Empty when there are none.",
+    )
