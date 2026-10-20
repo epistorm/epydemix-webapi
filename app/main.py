@@ -6,13 +6,16 @@ sets up CORS middleware, and defines the root and health check endpoints.
 
 import json
 import logging
+import math
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Request, Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 
 from .api.v1.router import router as api_v1_router
 from .api.v1.schemas.common import HealthResponse
@@ -75,6 +78,26 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["Mcp-Session-Id"],  # MCP streamable HTTP session header
 )
+
+
+def _finite_json(value):
+    """Replace non-finite floats with strings so the value can be encoded as JSON."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: _finite_json(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_finite_json(item) for item in value]
+    return value
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_request: Request, exc: RequestValidationError):
+    """FastAPI's default 422 handler, but safe for non-finite inputs such as ``1e400``."""
+    return JSONResponse(
+        status_code=422, content={"detail": _finite_json(jsonable_encoder(exc.errors()))}
+    )
+
 
 # Include API router
 app.include_router(api_v1_router, prefix=settings.api_v1_prefix)
