@@ -29,5 +29,5 @@ The API is JSON-based, exposes an OpenAPI 3.1 spec, and returns responses as JSO
 
 ## Optional
 
-- [Source code](https://github.com/mu373/epydemix-webapi): GitHub repository
+- [Source code](https://github.com/epistorm/epydemix-webapi): GitHub repository
 - [epydemix library](https://github.com/epistorm/epydemix): the underlying simulation engine

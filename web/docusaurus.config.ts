@@ -45,7 +45,7 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          editUrl: 'https://github.com/mu373/epydemix-webapi/blob/main/web/',
+          editUrl: 'https://github.com/epistorm/epydemix-webapi/blob/main/web/',
           sidebarCollapsible: false,
           remarkPlugins: [remarkMath],
           rehypePlugins: [rehypeKatex],
@@ -143,7 +143,7 @@ const config: Config = {
           position: 'left',
         },
         {
-          href: 'https://github.com/mu373/epydemix-webapi',
+          href: 'https://github.com/epistorm/epydemix-webapi',
           label: 'GitHub',
           position: 'right',
           className: 'navbar-github-link',
@@ -167,7 +167,7 @@ const config: Config = {
         {
           title: 'Links',
           items: [
-            {label: 'GitHub', href: 'https://github.com/mu373/epydemix-webapi'},
+            {label: 'GitHub', href: 'https://github.com/epistorm/epydemix-webapi'},
             {label: 'epydemix', href: 'https://github.com/epistorm/epydemix'},
           ],
         },
