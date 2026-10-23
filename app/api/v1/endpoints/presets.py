@@ -32,7 +32,7 @@ def _preset_info(definition) -> PresetInfo:
     description="Get information about available predefined epidemic models.",
     operation_id="list_model_presets",
 )
-async def get_presets() -> PresetsListResponse:
+def get_presets() -> PresetsListResponse:
     """List all available model presets.
 
     Returns information about predefined epidemic models including their
@@ -49,7 +49,7 @@ async def get_presets() -> PresetsListResponse:
     summary="Export a model preset as Python",
     operation_id="export_model_preset_python",
 )
-async def export_preset_python(name: str) -> PythonSourceResponse:
+def export_preset_python(name: str) -> PythonSourceResponse:
     """Export an API preset as explicit epydemix model commands."""
     if name not in PRESETS:
         raise HTTPException(status_code=404, detail=f"Unknown model preset: {name}")

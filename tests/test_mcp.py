@@ -34,7 +34,7 @@ def mcp_client():
         yield c
 
 
-def _initialize(client: TestClient) -> str:
+def _initialize(client: TestClient) -> None:
     r = client.post(
         "/mcp",
         headers=MCP_HEADERS,
@@ -50,20 +50,19 @@ def _initialize(client: TestClient) -> str:
         },
     )
     assert r.status_code == 200, r.text
-    sid = r.headers["mcp-session-id"]
+    assert "mcp-session-id" not in r.headers
     client.post(
         "/mcp",
-        headers={**MCP_HEADERS, "Mcp-Session-Id": sid},
+        headers=MCP_HEADERS,
         json={"jsonrpc": "2.0", "method": "notifications/initialized"},
     )
-    return sid
 
 
 def test_mcp_lists_expected_tools_and_excludes_cache_status(mcp_client):
-    sid = _initialize(mcp_client)
+    _initialize(mcp_client)
     r = mcp_client.post(
         "/mcp",
-        headers={**MCP_HEADERS, "Mcp-Session-Id": sid},
+        headers=MCP_HEADERS,
         json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
     )
     assert r.status_code == 200
@@ -76,10 +75,10 @@ def test_mcp_health_check_round_trip(mcp_client):
     """A tools/call for health_check via MCP returns the same payload as GET /health."""
     http_health = mcp_client.get("/api/v1/health").json()
 
-    sid = _initialize(mcp_client)
+    _initialize(mcp_client)
     r = mcp_client.post(
         "/mcp",
-        headers={**MCP_HEADERS, "Mcp-Session-Id": sid},
+        headers=MCP_HEADERS,
         json={
             "jsonrpc": "2.0",
             "id": 3,
@@ -99,3 +98,22 @@ def test_root_link_header_advertises_mcp(client):
     assert r.status_code == 200
     link = r.headers.get("Link", "")
     assert '</mcp>; rel="mcp-server"' in link
+
+
+def test_mcp_requests_do_not_retain_sessions(mcp_client):
+    from app.main import mcp_http
+
+    for _ in range(5):
+        _initialize(mcp_client)
+    assert mcp_http._server_instances == {}
+    # No initialization state is required when a fresh connection reaches another worker.
+    response = mcp_client.post(
+        "/mcp",
+        headers=MCP_HEADERS,
+        json={
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/list",
+        },
+    )
+    assert response.status_code == 200

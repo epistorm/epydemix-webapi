@@ -1,9 +1,11 @@
 """Simulation request schemas: model, population, run, output, and the top-level request."""
 
+import math
 from datetime import date
 from typing import Annotated, Any, Literal, TypeAlias
 
 from pandas.tseries.frequencies import to_offset
+from pandas.tseries.offsets import BusinessHour
 from pydantic import (
     BaseModel,
     BeforeValidator,
@@ -13,6 +15,7 @@ from pydantic import (
     model_validator,
 )
 
+from .....config import settings
 from .....presets import PRESETS, preset_names
 from .....utils.calculated_parameters import RESERVED_NAMES
 from ..common import DateStr
@@ -80,13 +83,15 @@ class ModelConfig(BaseModel):
     )
     compartments: list[str] | None = Field(
         default=None,
+        max_length=100,
         description=(
             "List of compartment names for a custom model. Required if no preset.\n"
             '- Example: `["S", "E", "I", "R", "H"]`.'
         ),
     )
-    parameters: dict[str, float | list[float] | str] = Field(
+    parameters: dict[str, float | Annotated[list[float], Field(max_length=100)] | str] = Field(
         default_factory=dict,
+        max_length=100,
         description=(
             "Model parameters as key-value pairs. Each value is one of:\n"
             "- scalar `float`: uniform constant rate.\n"
@@ -118,6 +123,7 @@ class ModelConfig(BaseModel):
     )
     transitions: list[TransitionConfig] | None = Field(
         default=None,
+        max_length=100,
         description=(
             "List of transitions between compartments. Required if no preset.\n"
             "Each transition defines how individuals move from one compartment to another."
@@ -206,6 +212,7 @@ class CustomPopulationConfig(BaseModel):
     )
     age_groups: dict[str, Annotated[int, Field(gt=0)]] = Field(
         ...,
+        max_length=100,
         description=(
             "Age group label to population count. Insertion order defines the row/column "
             "order used by every entry in `contact_matrices`. Counts must be positive.\n"
@@ -213,8 +220,14 @@ class CustomPopulationConfig(BaseModel):
             '- Two groups: `{"A": 100, "B": 100}`.'
         ),
     )
-    contact_matrices: dict[str, list[list[NonNegativeFloat]]] = Field(
+    contact_matrices: dict[
+        str,
+        Annotated[
+            list[Annotated[list[NonNegativeFloat], Field(max_length=100)]], Field(max_length=100)
+        ],
+    ] = Field(
         ...,
+        max_length=100,
         description=(
             "Contact matrices keyed by layer name. The keys define the layer set; each "
             "matrix must be square with one row/column per `age_groups` entry, in the same "
@@ -263,14 +276,19 @@ class SimulationConfig(BaseModel):
 
     start_date: DateStr = Field(..., description="Start date in `YYYY-MM-DD` format.")
     end_date: DateStr = Field(..., description="End date in `YYYY-MM-DD` format.")
-    Nsim: int = Field(default=10, ge=1, le=1000, description="Number of simulation runs.")
-    dt: float = Field(default=1.0, gt=0, allow_inf_nan=False, description="Time step in days.")
-    seed: int | None = Field(default=None, description="Random seed for reproducibility.")
+    Nsim: int = Field(
+        default=settings.default_nsim, ge=1, le=1000, description="Number of simulation runs."
+    )
+    dt: float = Field(
+        default=settings.default_dt, gt=0, allow_inf_nan=False, description="Time step in days."
+    )
+    seed: int | None = Field(default=None, ge=0, description="Random seed for reproducibility.")
     resample_frequency: str = Field(
         default="D",
         description=(
             "Resampling frequency as a positive pandas offset alias. "
-            "`D` = daily, `W` = weekly, `ME` = month end."
+            "`D` = daily, `W` = weekly, `ME` = month end. "
+            "Business-hour offsets (`bh`, `cbh`) are not supported."
         ),
     )
 
@@ -283,6 +301,8 @@ class SimulationConfig(BaseModel):
             raise ValueError(
                 f"'{value}' is not a valid pandas frequency (e.g. 'D', 'W', 'ME')"
             ) from None
+        if isinstance(offset, BusinessHour):
+            raise ValueError("Business-hour resampling offsets (bh, cbh) are not supported")
         if offset.n <= 0:
             raise ValueError(f"'{value}' must be a positive interval")
         return value
@@ -297,7 +317,23 @@ class SimulationConfig(BaseModel):
         days = (date.fromisoformat(self.end_date) - date.fromisoformat(self.start_date)).days
         if self.dt < 1:
             days += 1
-        steps = int(days / self.dt) + 1
+        if self.Nsim > settings.max_nsim:
+            raise ValueError(f"Nsim exceeds configured maximum {settings.max_nsim}")
+        ratio = days / self.dt
+        if not math.isfinite(ratio) or ratio + 1 > settings.max_simulation_steps:
+            raise ValueError(
+                f"Simulation exceeds {settings.max_simulation_steps} internal time steps"
+            )
+        if not ("1678-01-01" <= self.start_date <= self.end_date <= "2261-12-31"):
+            raise ValueError("Simulation dates must be within 1678-01-01 and 2261-12-31")
+        offset = to_offset(self.resample_frequency)
+        try:
+            output_steps = math.ceil((days + 1) * 86400000000000 / offset.nanos)
+        except ValueError:  # Calendar offsets are at least a day.
+            output_steps = days + 1
+        if output_steps > settings.max_simulation_steps:
+            raise ValueError(f"Resampled output exceeds {settings.max_simulation_steps} time steps")
+        steps = int(ratio) + 1
         if steps < 3:
             raise ValueError(
                 f"Simulation from 'start_date' to 'end_date' with dt={self.dt} has "
@@ -393,10 +429,12 @@ class SummaryConfig(BaseModel):
 class OutputConfig(BaseModel):
     """Output configuration. Everything is optional; defaults return all compartments, all transitions, all age groups (including `total`), all standard quantiles, and a populated `summary`."""
 
-    quantiles: list[float] | None = Field(
+    quantiles: list[Annotated[float, Field(ge=0, le=1, allow_inf_nan=False)]] | None = Field(
         default=None,
+        min_length=1,
+        max_length=100,
         description=(
-            "Quantiles to compute for trajectories and summary. "
+            "Quantiles to compute for trajectories and summary. Provide 1–100 finite values in [0, 1]. "
             "Default: `[0.025, 0.05, 0.25, 0.5, 0.75, 0.95, 0.975]`."
         ),
     )
@@ -623,6 +661,7 @@ class VaccinationConfig(BaseModel):
 
     flows: list[CompartmentFlow] | None = Field(
         default=None,
+        max_length=100,
         description=(
             "Compartments competing for doses, each with an optional `target`. "
             "Sources without a `target` act as dose sinks (contribute to the "
@@ -634,6 +673,7 @@ class VaccinationConfig(BaseModel):
     )
     campaigns: list[VaccinationCampaignConfig] = Field(
         default_factory=list,
+        max_length=100,
         description=(
             "Campaign windows. Each carries its own rollout strategy; multiple "
             "campaigns may overlap and mix strategies. Their per-step dose "
@@ -675,10 +715,11 @@ class SimulationRequest(BaseModel):
         default=None, description="Initial conditions. Defaults to a small infected fraction."
     )
     interventions: list[InterventionConfig] | None = Field(
-        default=None, description="Contact reduction interventions to apply."
+        default=None, max_length=100, description="Contact reduction interventions to apply."
     )
     parameter_transforms: list[ParameterTransformConfig] | None = Field(
         default=None,
+        max_length=100,
         description=(
             "Parameter transforms applied to model parameters. Three methods are supported:\n"
             "- `balcan`: sinusoidal seasonality across the simulation timeline (multiplicative).\n"
@@ -773,4 +814,56 @@ class SimulationRequest(BaseModel):
                 f"initial_conditions references unknown compartment(s) {unknown}. "
                 f"Model compartments are {list(compartments)}."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_work_budget(self) -> "SimulationRequest":
+        """Reject work before model, date and contact arrays are allocated."""
+        groups = (
+            len(self.population.age_groups)
+            if isinstance(self.population, CustomPopulationConfig)
+            else len(self.population.age_group_mapping or {}) or 5
+        )
+        return self.check_work_budget(groups)
+
+    def check_work_budget(self, groups: int, layers: int | None = None) -> "SimulationRequest":
+        layers = (
+            layers
+            if layers is not None
+            else (
+                len(self.population.contact_matrices)
+                if isinstance(self.population, CustomPopulationConfig)
+                else len(self.population.layers or DEFAULT_LAYERS)
+            )
+        )
+        preset = PRESETS[self.model.preset] if self.model.preset else None
+        compartments = len(preset.compartments if preset else self.model.compartments or [])
+        transitions = len(preset.transitions if preset else self.model.transitions or [])
+        days = (
+            date.fromisoformat(self.simulation.end_date)
+            - date.fromisoformat(self.simulation.start_date)
+        ).days
+        steps = int((days + (self.simulation.dt < 1)) / self.simulation.dt) + 1
+        if self.vaccination:
+            transitions += len(self.vaccination.flows or [None])
+        offset = to_offset(self.simulation.resample_frequency)
+        try:
+            output_steps = math.ceil((days + 1) * 86400000000000 / offset.nanos)
+        except ValueError:
+            output_steps = days + 1
+        parameters = len(self.model.parameters) + (len(preset.default_parameters) if preset else 0)
+        if max(groups, layers, compartments, transitions, parameters) > 100:
+            raise ValueError(
+                "Models support at most 100 age groups, layers, compartments, transitions or parameters"
+            )
+        if steps * groups * groups * (layers + 1) > settings.max_contact_cells:
+            raise ValueError("Simulation exceeds the contact-matrix allocation budget")
+        quantiles = len(self.output.quantiles) if self.output and self.output.quantiles else 7
+        cells = (
+            max(steps, output_steps)
+            * (groups + 1)
+            * ((compartments + transitions) * (self.simulation.Nsim + quantiles) + parameters)
+        )
+        if cells > settings.max_simulation_cells:
+            raise ValueError("Simulation exceeds the trajectory/parameter allocation budget")
         return self
