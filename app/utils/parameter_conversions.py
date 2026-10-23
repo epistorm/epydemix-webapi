@@ -47,14 +47,15 @@ def resolve_parameter_conversions(
     model_parameters: dict[str, Any],
     user_scalar_names: set[str],
     conversions: dict[str, ParameterConversion],
-) -> dict[str, str]:
+) -> tuple[dict[str, str], list[tuple[str, str]]]:
     """Inject calc-params for source scalars the user supplied on opted-in presets.
 
     Called after preset construction (so preset defaults are already in
     ``model_parameters``) and before calc-param evaluation. Mutates
     ``model_parameters`` in place (drops the source scalar when the user
     overrides the derived directly) and returns a dict of derived-name →
-    expression to merge into the pipeline's ``expr_params``.
+    expression to merge into the pipeline's ``expr_params``, plus the
+    ``(source, derived)`` pairs whose conversion was skipped by rule 1.
 
     Parameters
     ----------
@@ -73,6 +74,10 @@ def resolve_parameter_conversions(
     -------
     dict[str, str]
         Derived name → expression. Empty when nothing fires.
+    list[tuple[str, str]]
+        ``(source, derived)`` for every conversion skipped because the user
+        passed the derived directly. Callers filter by which sources the user
+        supplied (vs. preset defaults) before surfacing a warning.
 
     Precedence per derived entry ``conv = conversions[name]``:
 
@@ -90,11 +95,13 @@ def resolve_parameter_conversions(
     disable handling needed here.
     """
     new_calc_params: dict[str, str] = {}
+    overridden: list[tuple[str, str]] = []
     for derived_name, conv in conversions.items():
         if derived_name in user_scalar_names:
             model_parameters.pop(conv.source, None)
+            overridden.append((conv.source, derived_name))
             continue
         if conv.source not in model_parameters:
             continue
         new_calc_params[derived_name] = conv.expression
-    return new_calc_params
+    return new_calc_params, overridden

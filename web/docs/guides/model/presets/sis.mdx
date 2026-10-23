@@ -23,7 +23,7 @@ The Susceptible-Infected-Susceptible model. Individuals return to the susceptibl
 
 ## Parameters
 
-Some parameters can be provided in multiple forms. For example, you can pass `transmission_rate` directly instead of the default `R0`, or `infectious_period` instead of `recovery_rate`, which is converted automatically. If both forms are supplied, the rate form wins and the source is dropped silently. See [calculated parameters](../parameters/overview.mdx#reserved-names) for the conversion machinery.
+Some parameters can be provided in multiple forms. For example, you can pass `transmission_rate` directly instead of the default `R0`, or `infectious_period` instead of `recovery_rate`, which is converted automatically. If both forms are supplied, the rate form is used and the response includes a [warning](../../warnings.mdx). See [Preset conversions and precedence](../parameters/overview.mdx#preset-conversions-and-precedence) for details.
 
 | Parameter | Status | Default | Description |
 |---|---|---|---|

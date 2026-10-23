@@ -55,7 +55,7 @@ The `initial_conditions` block seeds the compartments at the start of the simula
 
 ## 4. Read the response
 
-The response contains `metadata`, `results`, and a `status` field. By default the API returns everything: all compartments and transitions, all age groups (plus `total`), all seven standard quantiles, and a `summary` with peaks and cumulative totals per age group. You can narrow any of these via `output` (see [Customizing output](#5-customizing-output)).
+The response contains `metadata`, `results`, `warnings`, and a `status` field. By default the API returns everything: all compartments and transitions, all age groups (plus `total`), all seven standard quantiles, and a `summary` with peaks and cumulative totals per age group. You can narrow any of these via `output` (see [Customizing output](#5-customizing-output)).
 
 ```json
 {
@@ -136,13 +136,29 @@ The response contains `metadata`, `results`, and a `status` field. By default th
         }
       }
     }
-  }
+  },
+  "warnings": []
 }
 ```
 
 Results are organized as quantiles (median, confidence intervals) across simulation runs. Both `compartments` and `transitions` follow the same nested structure: `name -> age_group -> quantile -> [values]`. The `total` age group is the sum across all age groups.
 
 `summary` mirrors that shape without the time dimension. `peaks` is `compartment -> age_group -> {quantiles, peak_date}` and carries the maximum value reached during the simulation window per quantile. `totals` is `transition -> age_group -> {quantiles}` and carries the cumulative number of transition events over the whole window.
+
+`warnings` is an empty list when there is nothing to report. For example, passing both `infectious_period` and `recovery_rate` to a preset uses `recovery_rate` and returns:
+
+```json
+"warnings": [
+  {
+    "code": "parameter_overridden",
+    "parameter": "infectious_period",
+    "overridden_by": "recovery_rate",
+    "message": "infectious_period was ignored because recovery_rate was explicitly provided."
+  }
+]
+```
+
+See [Warnings](./warnings.mdx) for the codes and how to resolve them.
 
 ### Errors
 
