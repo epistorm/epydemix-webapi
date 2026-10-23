@@ -1,4 +1,4 @@
-import type { ShowKey, SimulationResponse } from './types';
+import type { Run, ShowKey, SimulationResponse } from './types';
 
 export async function runSimulation(
   apiBase: string,
@@ -72,6 +72,25 @@ export function pickDates(response: SimulationResponse, show?: ShowKey | null): 
   if (!r) return null;
   if (show?.kind === 'parameter' && r.parameters?.dates) return r.parameters.dates;
   return r.compartments?.dates ?? r.transitions?.dates ?? r.parameters?.dates ?? null;
+}
+
+export function buildChartData(
+  runs: Run[],
+  show: ShowKey,
+  ageGroup: string,
+): Array<{ x: string } & Record<string, number | string | null>> {
+  const rows = new Map<string, { x: string } & Record<string, number | string | null>>();
+  for (const run of runs) {
+    const dates = pickDates(run.response, show) ?? [];
+    const series = pickSeries(run.response, show, ageGroup) ?? [];
+    for (let i = 0; i < dates.length; i++) {
+      const date = dates[i];
+      const row = rows.get(date) ?? { x: date };
+      row[run.id] = series[i] ?? null;
+      rows.set(date, row);
+    }
+  }
+  return [...rows.values()].sort((a, b) => a.x.localeCompare(b.x));
 }
 
 export function showKeyId(s: ShowKey): string {

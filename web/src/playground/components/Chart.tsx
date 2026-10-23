@@ -9,7 +9,7 @@ import {
   YAxis,
 } from 'recharts';
 import type { Run, ShowKey } from '../types';
-import { pickDates, pickSeries } from '../api';
+import { buildChartData } from '../api';
 
 type Props = {
   runs: Run[];
@@ -19,27 +19,11 @@ type Props = {
   onSelectRun: (id: string) => void;
 };
 
-type Row = { x: number | string } & Record<string, number | string | null>;
-
 export default function Chart({ runs, show, ageGroup, selectedRunId, onSelectRun }: Props) {
-  const data: Row[] = useMemo(() => {
-    if (!show || runs.length === 0) return [];
-    const seriesByRun = runs.map((run) => {
-      const s = pickSeries(run.response, show, ageGroup);
-      return { run, series: s ?? [] };
-    });
-    const longest = seriesByRun.reduce((m, x) => Math.max(m, x.series.length), 0);
-    const dates = pickDates(runs[runs.length - 1].response, show);
-    const rows: Row[] = [];
-    for (let i = 0; i < longest; i++) {
-      const row: Row = { x: dates?.[i] ?? i };
-      for (const { run, series } of seriesByRun) {
-        row[run.id] = series[i] ?? null;
-      }
-      rows.push(row);
-    }
-    return rows;
-  }, [runs, show, ageGroup]);
+  const data = useMemo(
+    () => show ? buildChartData(runs, show, ageGroup) : [],
+    [runs, show, ageGroup],
+  );
 
   if (runs.length === 0) {
     return <div style={{ color: 'var(--ifm-color-emphasis-500)', padding: '2rem', textAlign: 'center' }}>
