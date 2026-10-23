@@ -137,7 +137,7 @@ _UNITED_STATES_DETAIL_EXAMPLE = {
     description="Get a list of all available populations that can be used in simulations.",
     operation_id="list_populations",
 )
-async def get_populations() -> PopulationListResponse:
+def get_populations() -> PopulationListResponse:
     """List all available populations.
 
     Returns a summary of each population including name and available
@@ -167,7 +167,7 @@ async def get_populations() -> PopulationListResponse:
     summary="Export population listing as Python",
     operation_id="export_population_list_python",
 )
-async def export_population_list_python(
+def export_population_list_python(
     attribute: str = Query(default="age"),
     level: int | None = Query(default=None),
 ) -> PythonSourceResponse:
@@ -183,7 +183,7 @@ async def export_population_list_python(
     summary="Export a custom population as Python",
     operation_id="export_custom_population_python",
 )
-async def export_custom_population_python(
+def export_custom_population_python(
     config: CustomPopulationConfig = Body(...),
 ) -> PythonSourceResponse:
     """Export Python that constructs an inline custom population."""
@@ -199,7 +199,7 @@ async def export_custom_population_python(
     description="Get information about the population cache.",
     operation_id="get_population_cache_status",
 )
-async def get_cache_status() -> CacheInfoResponse:
+def get_cache_status() -> CacheInfoResponse:
     """Get population cache status.
 
     Returns cache statistics including hits, misses, and list of
@@ -220,7 +220,7 @@ async def get_cache_status() -> CacheInfoResponse:
     summary="Export population loading as Python",
     operation_id="export_population_python",
 )
-async def export_population_python(
+def export_population_python(
     name: str,
     contacts_source: str | None = Query(default=None),
 ) -> PythonSourceResponse:
@@ -236,7 +236,7 @@ async def export_population_python(
     summary="Export contact-matrix loading as Python",
     operation_id="export_population_contacts_python",
 )
-async def export_population_contacts_python(
+def export_population_contacts_python(
     name: str,
     contacts_source: str | None = Query(default=None),
     layers: list[str] | None = Query(default=None),
@@ -272,7 +272,7 @@ async def export_population_contacts_python(
         }
     },
 )
-async def get_population(
+def get_population(
     name: str = Path(
         ...,
         description="Population identifier (e.g. `United_States`).",
@@ -323,7 +323,7 @@ async def get_population(
     description="Get contact matrices for a specific population.",
     operation_id="get_population_contacts",
 )
-async def get_contact_matrices(
+def get_contact_matrices(
     name: str,
     contacts_source: str | None = Query(
         default=None,

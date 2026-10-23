@@ -6,6 +6,7 @@ environment variables with the EPYDEMIX_ prefix.
 
 from importlib.metadata import PackageNotFoundError, version
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 try:
@@ -48,17 +49,21 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
 
     # Simulation defaults
-    default_nsim: int = 100
-    max_nsim: int = 1000
-    default_dt: float = 1.0
+    default_nsim: int = Field(default=10, ge=1, le=1000)
+    max_nsim: int = Field(default=1000, ge=1, le=1000)
+    default_dt: float = Field(default=1.0, gt=0, allow_inf_nan=False)
 
     # Cache settings
     warm_cache_on_startup: bool = True
     warm_cache_populations: list[str] | None = None  # None = use defaults
 
     # Timeout settings (seconds)
-    population_load_timeout: float = 30.0  # Max time to load a single population
-    request_timeout: float = 60.0  # Max time for any API request
+    population_load_timeout: float = Field(default=30.0, gt=0, allow_inf_nan=False)
+    request_timeout: float = Field(default=60.0, gt=0, allow_inf_nan=False)
+    # Per-worker admission and pre-allocation budgets.
+    max_simulation_steps: int = Field(default=10000, ge=3)
+    max_simulation_cells: int = Field(default=10000000, ge=1)
+    max_contact_cells: int = Field(default=2000000, ge=1)
 
     # MCP server (Model Context Protocol) — exposes API endpoints as agent tools at /mcp
     mcp_enabled: bool = True

@@ -266,3 +266,20 @@ def test_cache_status_handles_concurrent_insertions_and_evictions(monkeypatch):
     finally:
         writer.join()
         sys.setswitchinterval(old_interval)
+
+
+def test_warmed_population_handoff_needs_no_child_network(population_data, client, monkeypatch):
+    downloads, _ = population_data
+    assert service.warm_cache(["Test"]) == {"Test": True}
+    # Spawned workers inherit the proxy; any accidental remote metadata load fails.
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:1")
+    response = client.post("/api/v1/simulations", json={
+        "model": {"preset": "SIR"},
+        "population": {"name": "Test"},
+        "simulation": {"start_date": "2025-01-01", "end_date": "2025-01-03", "Nsim": 1},
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()["metadata"]["population"]["contacts_source"] == "mistry_2021"
+    assert len(downloads) == 1
+    assert service.get_cache_info()["hits"] == 1
