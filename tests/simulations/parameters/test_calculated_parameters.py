@@ -1009,11 +1009,16 @@ def test_parameter_overridden_warning(client, preset, parameters, expected):
             {"recovery_rate": "gamma", "gamma": "1 / infectious_period", "infectious_period": 7.0},
         ),
         (
-            "V-SEIR",  # chained through the preset's own calc-param name
+            "V-SEIR",  # R0 is used indirectly through the overridden preset calc-param.
             {
-                "transmission_rate_vax": "R0 * 0.01",
-                "transmission_rate": "transmission_rate_vax * 2",
+                # transmission_rate = R0 * recovery_rate / eigenvalue.
+                # Vaccination halves this rate; dividing by (1 - VE_S) recovers it.
+                "transmission_rate_vax": (
+                    "R0 * recovery_rate / CONTACT_MATRIX_EIGENVALUE_ALL * (1 - VE_S)"
+                ),
+                "transmission_rate": "transmission_rate_vax / (1 - VE_S)",
                 "R0": 2.0,
+                "VE_S": 0.5,
             },
         ),
         ("V-SEIR", {"recovery_rate": "0.4"}),  # source only from preset defaults
