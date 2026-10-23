@@ -12,7 +12,8 @@
     "swizzle": "docusaurus swizzle",
     "clear": "docusaurus clear",
     "serve": "docusaurus serve",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "test": "bun test"
   },
   "dependencies": {
     "@docusaurus/core": "3.10.1",
