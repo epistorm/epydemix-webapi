@@ -772,30 +772,30 @@ _TWO_LAYER_POPULATION = {
 }
 
 
-def _dominant_eigenvalue(population: dict) -> float:
+def _calculate_dominant_eigenvalue(population: dict) -> float:
     import numpy as np
 
     summed = sum(np.asarray(m, dtype=float) for m in population["contact_matrices"].values())
     return float(np.max(np.abs(np.linalg.eigvals(summed))))
 
 
-def _effective_rates(client, preset: str, population: dict, parameters: dict) -> dict:
+def _get_effective_rates(client, preset: str, population: dict, parameters: dict) -> dict:
     request = _preset_request(preset, parameters)
     request["population"] = population
     response = client.post("/api/v1/simulations", json=request)
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "completed", body.get("error")
-    data = body["results"]["parameters"]["data"]
-    return {name: next(iter(series.values()))[0] for name, series in data.items()}
+    parameter_data = body["results"]["parameters"]["data"]
+    return {name: next(iter(series.values()))[0] for name, series in parameter_data.items()}
 
 
 @pytest.mark.parametrize("preset", ["SIR", "SEIR", "SIS"])
 @pytest.mark.parametrize("population", [_TWO_GROUP_POPULATION, _TWO_LAYER_POPULATION])
 def test_basic_preset_defaults_give_R0_2_5(client, preset, population):
     """With no parameters, the derived beta gives R0 = beta * rho(C) / mu = 2.5 on any matrix."""
-    rates = _effective_rates(client, preset, population, {})
-    eigenvalue = _dominant_eigenvalue(population)
+    rates = _get_effective_rates(client, preset, population, {})
+    eigenvalue = _calculate_dominant_eigenvalue(population)
     assert rates["recovery_rate"] == pytest.approx(0.1, abs=1e-12)
     assert rates["transmission_rate"] == pytest.approx(2.5 * 0.1 / eigenvalue, rel=1e-9)
     effective_R0 = rates["transmission_rate"] * eigenvalue / rates["recovery_rate"]
@@ -807,7 +807,7 @@ def test_basic_preset_defaults_give_R0_2_5(client, preset, population):
 @pytest.mark.parametrize("preset", ["SIR", "SEIR", "SIS"])
 def test_basic_preset_explicit_transmission_rate_wins_over_default_R0(client, preset):
     """An explicit `transmission_rate` stands as given; the default `R0` is dropped."""
-    rates = _effective_rates(client, preset, _TWO_LAYER_POPULATION, {"transmission_rate": 0.3})
+    rates = _get_effective_rates(client, preset, _TWO_LAYER_POPULATION, {"transmission_rate": 0.3})
     assert rates["transmission_rate"] == pytest.approx(0.3, abs=1e-12)
     assert "R0" not in rates
 
@@ -816,12 +816,12 @@ def test_basic_preset_explicit_transmission_rate_wins_over_default_R0(client, pr
 def test_basic_preset_explicit_R0_and_infectious_period(client, preset):
     """User `R0` and `infectious_period` replace the defaults in the beta conversion."""
     population = _TWO_LAYER_POPULATION
-    eigenvalue = _dominant_eigenvalue(population)
+    eigenvalue = _calculate_dominant_eigenvalue(population)
 
-    rates = _effective_rates(client, preset, population, {"R0": 1.5})
+    rates = _get_effective_rates(client, preset, population, {"R0": 1.5})
     assert rates["transmission_rate"] == pytest.approx(1.5 * 0.1 / eigenvalue, rel=1e-9)
 
-    rates = _effective_rates(client, preset, population, {"infectious_period": 5.0})
+    rates = _get_effective_rates(client, preset, population, {"infectious_period": 5.0})
     assert rates["recovery_rate"] == pytest.approx(0.2, abs=1e-12)
     assert rates["transmission_rate"] == pytest.approx(2.5 * 0.2 / eigenvalue, rel=1e-9)
 
