@@ -52,42 +52,63 @@ def _custom(*transitions):
 
 # Rejected by the request schema, so both endpoints agree.
 SCHEMA_INVALID = {
+    # Initial percentages cannot be negative.
     "percentage_negative": _request(initial_conditions={"initial_percentages": {"Infected": -1}}),
+    # An initial percentage cannot exceed 100.
     "percentage_over_100": _request(initial_conditions={"initial_percentages": {"Infected": 101}}),
+    # 60 + 60 exceeds the total of 100 percent.
     "percentage_sum_over_100": _request(
         initial_conditions={"initial_percentages": {"Infected": 60, "Recovered": 60}}
     ),
+    # Initial percentages must be finite.
     "percentage_infinite": _request(initial_conditions={"initial_percentages": {"Infected": INF}}),
+    # Absolute initial conditions require compartment counts.
     "absolute_empty": _request(initial_conditions=_absolute()),
+    # Initial counts cannot be negative.
     "absolute_negative": _request(
         initial_conditions=_absolute(Susceptible=[10010, 20010], Infected=[-10, -10])
     ),
+    # One count is too short for the two age groups.
     "absolute_short": _request(initial_conditions=_absolute(Susceptible=[9990], Infected=[10])),
+    # Three counts are too many for the two age groups.
     "absolute_long": _request(
         initial_conditions=_absolute(Susceptible=[9990, 19990, 10], Infected=[10, 10, 0])
     ),
+    # Age group populations must be positive.
     "population_negative": _request(population=_population(age_groups={"A": -10, "B": 20000})),
+    # An age group cannot have zero population.
     "population_zero_group": _request(population=_population(age_groups={"A": 0, "B": 20000})),
+    # Contact matrix entries cannot be negative.
     "contacts_negative": _request(
         population=_population(contact_matrices={"all": [[-8, 0], [0, -6]]})
     ),
+    # Contact matrix entries must be finite.
     "contacts_infinite": _request(
         population=_population(contact_matrices={"all": [[INF, 2.0], [1.0, 6.0]]})
     ),
+    # The time step must be finite.
     "dt_infinite": _request(simulation={"dt": INF}),
+    # garbage is not a valid resampling frequency.
     "frequency_garbage": _request(simulation={"resample_frequency": "garbage"}),
+    # The resampling interval must be greater than zero.
     "frequency_zero": _request(simulation={"resample_frequency": "0D"}),
+    # The resampling interval cannot be negative.
     "frequency_negative": _request(simulation={"resample_frequency": "-1D"}),
+    # M is no longer a valid pandas offset alias; use ME.
     "frequency_removed_alias": _request(simulation={"resample_frequency": "M"}),
+    # X is not a compartment in the custom model.
     "unknown_mediator": _request(
         model=_custom({"source": "S", "target": "I", "kind": "mediated", "params": ["beta", "X"]})
     ),
+    # gamma is not defined in the model parameters.
     "unknown_rate": _request(
         model=_custom({"source": "S", "target": "I", "kind": "mediated", "params": ["gamma", "I"]})
     ),
+    # A mediated transition requires both a rate and a mediator.
     "mediated_without_mediator": _request(
         model=_custom({"source": "S", "target": "I", "kind": "mediated", "params": ["beta"]})
     ),
+    # school is not in the custom population contact matrices.
     "intervention_unknown_layer": _request(
         interventions=[
             {
@@ -98,6 +119,7 @@ SCHEMA_INVALID = {
             }
         ]
     ),
+    # school is not selected; only home is loaded.
     "intervention_layer_not_loaded": _request(
         population={"name": "United_States", "layers": ["home"]},
         interventions=[
@@ -109,10 +131,13 @@ SCHEMA_INVALID = {
             }
         ],
     ),
+    # infectious_period must be positive for the 1 / period conversion.
     "period_negative": _request(model={"preset": "SEIR", "parameters": {"infectious_period": -2}}),
+    # Every incubation_period value must be positive; zero would divide by zero.
     "period_list_zero": _request(
         model={"preset": "SEIR", "parameters": {"incubation_period": [3.0, 0.0]}}
     ),
+    # Balcan max_value must be greater than zero.
     "balcan_zero_max": _request(
         parameter_transforms=[
             {
@@ -124,6 +149,7 @@ SCHEMA_INVALID = {
             }
         ]
     ),
+    # Identical min_date and max_date give a zero-length seasonal half-period.
     "balcan_zero_period": _request(
         parameter_transforms=[
             {
