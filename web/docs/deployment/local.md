@@ -20,6 +20,9 @@ uv run uvicorn app.main:app --reload
 
 The API is now running at `http://localhost:8000`.
 
+After pulling an update, run `uv sync --locked` and restart the server to use
+the dependencies recorded in `uv.lock`.
+
 ## With Docker Compose
 
 ```bash
@@ -39,7 +42,7 @@ curl http://localhost:8000/api/v1/health
 ```
 
 ```json
-{"status": "healthy", "version": "0.1.1", "epydemix_version": "1.0.0"}
+{"status": "healthy", "version": "0.11.0", "epydemix_version": "1.4.0"}
 ```
 
 Swagger UI is available at `http://localhost:8000/api/v1/docs`.
