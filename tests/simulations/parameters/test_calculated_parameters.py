@@ -1012,6 +1012,8 @@ def test_parameter_overridden_warning(client, preset, parameters, expected):
         )
 
 
+# Each (preset, parameters) case below should return warnings: [].
+# User-supplied sources are still used, or only preset defaults are overridden.
 @pytest.mark.parametrize(
     "preset, parameters",
     [
