@@ -1,0 +1,88 @@
+---
+sidebar_position: 4
+---
+
+import EndpointSelector from '@site/src/components/EndpointSelector';
+import CurlBlock from '@site/src/components/CurlBlock';
+
+# SIS
+
+<EndpointSelector />
+
+The Susceptible-Infected-Susceptible model. Individuals return to the susceptible state after recovery, with no lasting immunity.
+
+## Compartments
+
+- **Susceptible**: individuals who can be infected
+- **Infected**: individuals who are currently infectious
+
+## Transitions
+
+- **Susceptible &rarr; Infected**: mediated by `transmission_rate` and the number of Infected individuals
+- **Infected &rarr; Susceptible**: spontaneous at `recovery_rate`
+
+## Parameters
+
+Some parameters can be provided in multiple forms. For example, you can pass `transmission_rate` directly instead of the default `R0`, or `infectious_period` instead of `recovery_rate`, which is converted automatically. If both forms are supplied, the rate form is used and the response includes a [warning](../../warnings.mdx). See [Preset conversions and precedence](../parameters/overview.mdx#preset-conversions-and-precedence) for details.
+
+| Parameter | Status | Default | Description |
+|---|---|---|---|
+| `R0` | Default | `2.5` | Basic reproduction number. |
+| `transmission_rate` | Alternative to `R0` | derived | $\beta$. Per-contact transmission rate. Default: `R0 * recovery_rate / CONTACT_MATRIX_EIGENVALUE_ALL`. |
+| `recovery_rate` | Default | `0.1` | I &rarr; S rate. |
+| `infectious_period` | Alternative to `recovery_rate` | unset | Days infectious before returning to susceptible. When passed, `recovery_rate = 1 / infectious_period`. |
+
+`CONTACT_MATRIX_EIGENVALUE_ALL` is the dominant eigenvalue of the chosen population's contact matrix, summed over layers. With the defaults, R0 stays at 2.5 and $\beta$ depends on the population: about `0.0178` for `United_States` and `0.0181` for `United_States__Vermont`. If you pass `transmission_rate`, it is used as given, so R0 is no longer fixed at 2.5. To see the effective `transmission_rate`, set [`output.include_parameters`](../parameters/overview.mdx#inspecting-parameter-values-in-the-response).
+
+## Examples
+
+### Rate form
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "SIS",
+      "parameters": {"transmission_rate": 0.4, "recovery_rate": 0.2}
+    },
+    "population": {"name": "United_States"},
+    "simulation": {"start_date": "2024-01-01", "end_date": "2024-12-31", "Nsim": 10}
+  }'`}
+</CurlBlock>
+
+### Using `R0` and `infectious_period`
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "SIS",
+      "parameters": {"R0": 2.0, "infectious_period": 5.0}
+    },
+    "population": {"name": "United_States"},
+    "simulation": {"start_date": "2024-01-01", "end_date": "2024-12-31", "Nsim": 10}
+  }'`}
+</CurlBlock>
+
+### Seeding initial conditions (percentage)
+
+Seed 0.1% of the population as `Infected`. The remainder goes to the first compartment (`Susceptible`). Values in `initial_percentages` are percentages, not fractions.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "SIS",
+      "parameters": {"R0": 2.0, "infectious_period": 5.0}
+    },
+    "population": {"name": "United_States"},
+    "simulation": {"start_date": "2024-01-01", "end_date": "2024-12-31", "Nsim": 10},
+    "initial_conditions": {
+      "method": "percentage",
+      "initial_percentages": {"Infected": 0.1}
+    }
+  }'`}
+</CurlBlock>

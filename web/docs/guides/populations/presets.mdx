@@ -1,0 +1,269 @@
+---
+sidebar_position: 2
+---
+
+import EndpointSelector from '@site/src/components/EndpointSelector';
+import CurlBlock from '@site/src/components/CurlBlock';
+
+# Population Presets
+
+<EndpointSelector />
+
+Population presets are built-in populations published in the [epydemix-data](https://github.com/epistorm/epydemix-data) repository. Each preset comes with age-distribution data and one or more contact-matrix sources, ready to use without you having to provide demographic data yourself. It lets you simulate epidemic for specific location and population, reflecting the demographics and contact structure.
+
+For background on what a population is and how the contact matrix shapes an age-stratified simulation, see [Overview](./overview.mdx).
+
+## List all populations
+
+Browse every population available in the API along with its supported contact sources.
+
+API reference: [`GET /api/v1/populations`](/api-reference).
+
+<CurlBlock>{`curl BASE_URL/populations`}</CurlBlock>
+
+
+Example response (truncated):
+
+```json
+{
+  "populations": [
+    {
+      "name": "Afghanistan",
+      "display_name": "Afghanistan",
+      "total_population": 42044654,
+      "available_contact_sources": ["prem_2021"]
+    },
+    {
+      "name": "United_States",
+      "display_name": "United States",
+      "total_population": 338120586,
+      "available_contact_sources": ["mistry_2021"]
+    }
+  ],
+  "total": 461
+}
+```
+
+### Subnational populations
+
+Beyond country-level entries, the API also exposes **subnational regions** (states, provinces, prefectures) using the naming convention `Country__Region` (double underscore between country and region). They behave exactly like country populations: pass the full identifier as `name` to any populations endpoint or as `population.name` in a simulation.
+
+| Country | Subdivisions | Example identifier |
+|---|---|---|
+| United States | 50 states + DC (plus ~3,100 counties; see below) | `United_States__Massachusetts`, `United_States__California`, `United_States__Texas` |
+| Russia | 83 | `Russia__Moscow`, `Russia__St._Petersburg` |
+| Japan | 47 prefectures | `Japan__Tokyo-to`, `Japan__Osaka-fu`, `Japan__Aichi-ken` |
+| India | 32 | `India__Maharashtra`, `India__Karnataka` |
+| China | 31 | `China__Beijing`, `China__Guangdong` |
+| Canada | 13 provinces/territories | `Canada__Ontario`, `Canada__Quebec` |
+| South Africa | 9 | `South_Africa__Gauteng`, `South_Africa__Western_Cape` |
+| Australia | 8 states/territories | `Australia__Victoria`, `Australia__New_South_Wales` |
+
+Use [`GET /api/v1/populations`](/api-reference) to enumerate every available identifier.
+
+Example: simulate an outbreak in Massachusetts.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {"preset": "SIR", "parameters": {"transmission_rate": 0.3, "recovery_rate": 0.1}},
+    "population": {"name": "United_States__Massachusetts"},
+    "simulation": {"start_date": "2024-01-01", "end_date": "2024-06-01", "Nsim": 50}
+  }'`}
+</CurlBlock>
+
+:::note
+All subnational entries currently ship only the `mistry_2021` contact source, so the `prem_2017` / `prem_2021` overrides available on most country populations don't apply here.
+:::
+
+### United States county-level
+
+The US is further divided into ~3,100 **counties**. Demographic distributions are sourced from the US Census Bureau (2023); contact matrices are inherited from the corresponding state (in the absence of county-specific survey data). Identifiers follow the same convention with one more level: `United_States__<State>__<County>`.
+
+| Example | Description |
+|---|---|
+| `United_States__Massachusetts__Suffolk_County` | Boston and surrounding cities |
+| `United_States__New_York__Kings_County` | Brooklyn |
+| `United_States__California__Los_Angeles_County` | Los Angeles |
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {"preset": "SIR", "parameters": {"transmission_rate": 0.3, "recovery_rate": 0.1}},
+    "population": {"name": "United_States__Massachusetts__Suffolk_County"},
+    "simulation": {"start_date": "2024-01-01", "end_date": "2024-06-01", "Nsim": 50}
+  }'`}
+</CurlBlock>
+
+## Inspect a population
+
+Look up demographic details for a single population: total size, age groups, and which contact sources and layers it ships with.
+
+API reference: [`GET /api/v1/populations/{name}`](/api-reference).
+
+<CurlBlock>{`curl BASE_URL/populations/United_States`}</CurlBlock>
+
+
+Returns the total population, the default 5-group age aggregation, the raw per-single-year age distribution, available contact sources, and contact layers.
+
+Example response (`age_distribution` truncated):
+
+```json
+{
+  "name": "United_States",
+  "display_name": "United States",
+  "total_population": 338120586,
+  "age_groups": {
+    "0-4":   18608139,
+    "5-19":  63540783,
+    "20-49": 132780169,
+    "50-64": 63172279,
+    "65+":   60019216
+  },
+  "age_distribution": {
+    "0":  3667336,
+    "1":  3713583,
+    "2":  3630098,
+    "...": 0,
+    "83":  1221647,
+    "84+": 7418335
+  },
+  "contact_sources": ["mistry_2021"],
+  "default_contact_source": "mistry_2021",
+  "available_layers": ["school", "work", "home", "community"]
+}
+```
+
+## Get contact matrices
+
+Fetch the per-layer mixing matrices used to compute the force of infection between age groups.
+
+API reference: [`GET /api/v1/populations/{name}/contacts`](/api-reference).
+
+<CurlBlock>{`curl BASE_URL/populations/United_States/contacts`}</CurlBlock>
+
+Returns one matrix per layer (`home`, `work`, `school`, `community`), the combined `overall` matrix, and the spectral radius of each. Pass `?contacts_source=prem_2021` or `?layers=home&layers=work` to narrow the response.
+
+Example response (matrix entries rounded to two decimals for brevity):
+
+```json
+{
+  "population_name": "United_States",
+  "contact_source": "default",
+  "age_groups": ["0-4", "5-19", "20-49", "50-64", "65+"],
+  "layers": {
+    "school": [
+      [0.68, 1.27, 0.19, 0.09, 0.01],
+      [0.41, 8.82, 1.08, 0.29, 0.04],
+      [0.03, 0.53, 1.01, 0.09, 0.02],
+      [0.03, 0.30, 0.17, 0.04, 0.01],
+      [0.01, 0.07, 0.07, 0.01, 0.00]
+    ],
+    "work": [
+      [0.00, 0.00, 0.00, 0.00, 0.00],
+      [0.00, 0.01, 0.23, 0.10, 0.01],
+      [0.00, 0.11, 3.31, 1.40, 0.14],
+      [0.00, 0.09, 2.86, 1.23, 0.12],
+      [0.00, 0.01, 0.44, 0.19, 0.02]
+    ],
+    "home":      [["..."]],
+    "community": [["..."]]
+  },
+  "overall": [
+    [1.42,  2.68, 3.79, 0.81, 0.43],
+    [0.87, 10.61, 4.50, 1.39, 0.50],
+    [0.64,  2.23, 7.17, 2.47, 0.66],
+    [0.28,  1.40, 5.06, 3.44, 0.92],
+    [0.22,  0.79, 2.10, 1.34, 2.17]
+  ],
+  "spectral_radius": {
+    "school":    8.96,
+    "work":      4.55,
+    "home":      3.75,
+    "community": 2.79,
+    "overall":  14.04
+  }
+}
+```
+
+Each row of `overall` corresponds to the same age group as `age_groups[i]`; the matrix is the sum of the per-layer matrices and is what the simulation uses by default. The diagonal of the `school` layer is dominated by the `5-19` entry (8.82), illustrating the assortative mixing discussed in the [Overview](./overview.mdx#contact-matrix).
+
+### Contact sources
+
+Three sources are available for most countries:
+
+| Source | Description |
+|---|---|
+| `prem_2017` | Prem et al. 2017 synthetic matrices |
+| `prem_2021` | Prem et al. 2021 update |
+| `mistry_2021` | Mistry et al. 2021 (default for most populations) |
+
+## Using population in a simulation
+
+### Population by name
+
+The minimal form to use population in simulations is by setting `population.name`. The default contact source is used and the default 5-group aggregation is applied.
+
+API reference: [`POST /api/v1/simulations`](/api-reference).
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {"preset": "SIR", "parameters": {"transmission_rate": 0.3, "recovery_rate": 0.1}},
+    "population": {"name": "United_States"},
+    "simulation": {"start_date": "2024-01-01", "end_date": "2024-06-01", "Nsim": 50}
+  }'`}
+</CurlBlock>
+
+### Pick a contact source and layers
+
+Override the defaults to choose which contact dataset is loaded and which layers it includes.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {"preset": "SIR", "parameters": {"transmission_rate": 0.3, "recovery_rate": 0.1}},
+    "population": {
+      "name": "United_States",
+      "contacts_source": "prem_2021",
+      "layers": ["home", "work", "school", "community"]
+    },
+    "simulation": {"start_date": "2024-01-01", "end_date": "2024-06-01", "Nsim": 10}
+  }'`}
+</CurlBlock>
+
+Omitting `layers` includes every layer the source provides.
+
+### Custom age-group aggregation
+
+By default, populations are returned in the 5-group `mistry_2021`/`prem_2021` aggregation. Use `age_group_mapping` to merge the source single-year groups into your own bins. Keys are your new group names; values list the source groups to merge.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {"preset": "SIR", "parameters": {"transmission_rate": 0.3, "recovery_rate": 0.1}},
+    "population": {
+      "name": "United_States",
+      "contacts_source": "prem_2021",
+      "age_group_mapping": {
+        "0-4":   ["0-4"],
+        "5-17":  ["5-9", "10-14", "15-19"],
+        "18-49": ["20-24", "25-29", "30-34", "35-39", "40-44", "45-49"],
+        "50-64": ["50-54", "55-59", "60-64"],
+        "65+":   ["65-69", "70-74", "75+"]
+      }
+    },
+    "simulation": {"start_date": "2024-01-01", "end_date": "2024-12-31", "Nsim": 10}
+  }'`}
+</CurlBlock>
+
+The resolved age groups become the row/column order of contact matrices and the index for any age-varying parameters in `model.parameters`.
+
+:::info
+Population data comes from the [epydemix-data](https://github.com/epistorm/epydemix-data) repository, which lists every available country and the source datasets behind each contact matrix.
+:::

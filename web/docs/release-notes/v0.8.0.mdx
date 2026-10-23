@@ -1,0 +1,48 @@
+---
+title: v0.8.0
+date: 2026-05-26
+summary: |
+  - New `V-SEIR` model preset
+  - V-SEIHR default initial conditions now seed `Exposed` and `Infected` evenly
+  - Last-day daily-aggregated transitions are now correct when `dt < 1`
+---
+
+import ReleaseHeader from '@site/src/components/ReleaseHeader';
+
+# v0.8.0
+
+<ReleaseHeader />
+
+## Overview
+
+- Add the **`V-SEIR`** model preset
+- **V-SEIHR** default initial conditions now seed `Exposed` and `Infected` evenly (`~0.025%` each) instead of putting the full `0.05%` seed in `Infected`.
+- Fix a partial-last-day aggregation issue when `simulation.dt < 1`: the daily-resampled transition sum on the user-requested `end_date` was being under-counted by a factor of `dt` (e.g. half on the last day with `dt=0.5`). The service now internally pads `end_date` by one calendar day and trims the trailing day before responding.
+
+## Simulations
+
+`POST /api/v1/simulations`
+
+### New model preset: `V-SEIR`
+
+`V-SEIR` mirrors `V-SEIHR` minus the hospitalization branch, with the same `VE_S` semantics on the vaccinated branch. The `vaccination` block from v0.7.0 works unchanged.
+
+See the [V-SEIR preset page](/docs/guides/model/presets/v-seir) for compartments, transitions, parameters, and examples.
+
+### V-SEIHR default initial conditions
+
+The default initial-condition seed for `V-SEIHR` (used when the request omits an `initial_conditions` block) was changed from `Infected = 0.05%, Susceptible = 99.95%` to `Exposed = 0.025%, Infected = 0.025%, Susceptible = 99.95%`. Because the previous seed had `Exposed=0` at `t=0`, the first `E -> I` transition could only fire after a full incubation period of build-up, producing a visible discontinuity at step 1 in incidence plots.
+
+Requests that supply an explicit `initial_conditions` block are unaffected.
+
+### Last-day aggregation with sub-daily `dt`
+
+When `simulation.dt < 1.0` and the output is resampled to daily (`resample_frequency="D"`, the default), the user-requested `end_date` previously received only one sub-step instead of `1/dt`. For example, with `dt=0.25` the last day's `Exposed_to_Infected` count would be roughly a quarter of what it should be.
+
+We have modified the internal simulation logic to ensure that the last day collects the full `1/dt` sub-steps when `dt < 1.0`. The user-facing response shape is unchanged: `metadata.simulation.end_date` still reports the requested date, and the dates axis ends on it.
+
+## Documentation
+
+- New [V-SEIR preset page](/docs/guides/model/presets/v-seir)
+- Fixed a broken link in the [playground page](/playground)
+

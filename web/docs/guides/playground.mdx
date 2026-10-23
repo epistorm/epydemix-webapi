@@ -1,0 +1,34 @@
+---
+sidebar_position: 2
+---
+
+# Playground
+
+The [Playground](/playground) is an interactive page for testing the API directly from the browser.
+
+
+## What you can do
+
+- Write a simulation request in JSON or load one from preset templates
+- Send the request to the API, and see the results in the preview pane
+    - View results as a time-series plot, switching compartments, transitions, age groups, and parameters
+    - Compare multiple runs (with different parameters or presets) by overlaying their plots
+    - Inspect and download the raw JSON response
+- Copy the equivalent `curl` command to reproduce the request outside the playground
+
+![Playground showing a SIR request on the US population on the left and overlaid trajectories for several runs on the right](/img/playground-screenshot-1.png)
+
+## When to use it
+
+- Exploring the request shape before wiring up a client
+- Iterating on parameters, dates, or `output` filters and seeing the effect immediately
+- Sanity-checking a custom model or population against a known preset
+- Confirming the effect of [parameter transformations](./model/parameters/transformations.mdx) such as seasonality, scaling, or overrides
+
+## Open the playground
+
+Click on [`Playground`](/playground) in the top navigation bar.
+
+:::tip
+For programmatic use, see [Running a Simulation](./running-a-simulation.mdx) for the full request and response shape, and the [API Reference](/api-reference) for an interactive request builder.
+:::

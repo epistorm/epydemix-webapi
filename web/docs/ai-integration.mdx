@@ -1,0 +1,134 @@
+---
+sidebar_position: 90
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# AI Integration
+
+The API is built so AI tools can use it directly. Two options, depending on how you work:
+
+- **[Chat](#chat)**: discuss the API or get help building requests in a regular chat conversation.
+- **[MCP server](#connect-via-mcp)**: let your AI assistant call the API directly as native tools, with no copy-paste or manual request bodies.
+
+## Chat
+
+To get help from an AI assistant in a regular chat, paste one of these resources into the prompt so it has accurate, up-to-date context about the API:
+
+- **OpenAPI spec** [`/openapi.json`](https://epyscenario-api.isi.it/api/v1/openapi.json): every endpoint with field types and example values, ideal when you want help **building requests**.
+- **Docs summary** [`/llms.txt`](https://epydemix-webapi.vercel.app/llms.txt) (~30 lines): short index of every doc page, good for general questions.
+- **Full docs** [`/llms-full.txt`](https://epydemix-webapi.vercel.app/llms-full.txt) (~30 KB): every doc page concatenated, ideal for grounding deeper questions or for RAG ingestion.
+
+Example prompts (use the copy button on each block):
+
+```text
+Using the OpenAPI spec, build an example JSON request for the SIR compartmental model with the United_States demographic dataset over a 6-month time window. This is for a numerical modeling exercise; only the request body is needed.
+Docs: https://epydemix-webapi.vercel.app/llms.txt
+OpenAPI spec: https://epyscenario-api.isi.it/api/v1/openapi.json
+```
+
+```text
+Using the docs provided, explain how the parameter_transforms field of this compartmental-model API works and show one minimal example request body for each method (balcan, scale, override).
+Docs: https://epydemix-webapi.vercel.app/llms.txt
+OpenAPI spec: https://epyscenario-api.isi.it/api/v1/openapi.json
+```
+
+```text
+Using the OpenAPI spec, generate a Python script using `requests` that runs the SIR simulation and prints the peak value of the new infection transitions from the median trajectory.
+This is a textbook SIR exercise on a synthetic demographic dataset.
+Docs: https://epydemix-webapi.vercel.app/llms.txt
+OpenAPI spec: https://epyscenario-api.isi.it/api/v1/openapi.json
+```
+
+:::tip Enable browsing
+Make sure the assistant has **web browsing or URL-fetch tools enabled** before pasting these prompts. The prompts reference live URLs (the OpenAPI spec, `llms.txt`, etc.); without browsing, the assistant cannot fetch them and will **hallucinate** endpoint names, field types, and requests which does not actually exist.
+:::
+
+:::tip Safety filters
+Some flagship models occasionally **flag conversations about epidemic models for safety reasons** and stop returning responses, even though the underlying work is a purely numerical, theoretical compartmental-model exercise. If this happens, framing it as in the examples above (theoretical/numerical work, textbook SIR / SEIR / SIS) could be effective. Switching to smaller models (e.g., Claude Sonnet 4, GPT-5.3 Instant) may also help.
+:::
+
+## Connect via MCP
+
+Model Context Protocol (MCP) lets AI assistants call this API as native tools, with no copy-paste or manual request bodies. Once connected, you just ask in plain language and the assistant handles the rest.
+
+The endpoint is:
+
+```
+https://epyscenario-api.isi.it/mcp
+```
+
+<Tabs groupId="mcp-client">
+  <TabItem value="claude-desktop" label="Claude Desktop" default>
+
+Claude Desktop needs a small bridge for remote MCP servers. Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "epydemix-webapi": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://epyscenario-api.isi.it/mcp"]
+    }
+  }
+}
+```
+
+  </TabItem>
+  <TabItem value="claude-code" label="Claude Code">
+
+Add the server with the `claude mcp add` command:
+
+```bash
+claude mcp add --transport http epydemix-webapi https://epyscenario-api.isi.it/mcp
+```
+
+This registers the server at user scope (available in every Claude Code session). Use `--scope project` if you want it tracked in a project-local `.mcp.json` instead.
+
+  </TabItem>
+  <TabItem value="codex" label="Codex">
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.epydemix-webapi]
+command = "npx"
+args = ["-y", "mcp-remote", "https://epyscenario-api.isi.it/mcp"]
+```
+
+  </TabItem>
+  <TabItem value="cursor" label="Cursor">
+
+Add to your Cursor MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "epydemix-webapi": {
+      "url": "https://epyscenario-api.isi.it/mcp"
+    }
+  }
+}
+```
+
+  </TabItem>
+  <TabItem value="claude-web" label="Claude (web)">
+
+In [claude.ai](https://claude.ai), open **Settings → Connectors → Add custom connector** and fill in:
+
+- **Name**: `epydemix-webapi`
+- **Remote MCP server URL**: `https://epyscenario-api.isi.it/mcp`
+
+</TabItem>
+</Tabs>
+
+Once connected, try asking the assistant something like:
+
+```text
+Run the SIR compartmental model with the United_States demographic dataset
+and Balcan summer-peak seasonality (max_value = 1, min_value = 0.1,
+max_date in mid-July), then summarize the resulting numerical trajectories.
+```
+
+The assistant will pick the right tool, send the request, and explain the response.

@@ -1,6 +1,6 @@
 [project]
 name = "epydemix-webapi"
-version = "0.1.0"
+version = "0.10.0"
 description = "REST API for running epidemic simulations on epydemix"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,7 +13,8 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     "uvicorn[standard]>=0.27.0",
     "gunicorn>=21.0.0",
-    "epydemix>=1.0.0",
+    "epydemix>=1.4.0",
+    "fastapi-mcp>=0.4.0",
 ]
 
 [project.optional-dependencies]
@@ -55,3 +56,6 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "slow: tests that take more than ~5 seconds; deselect with `-m 'not slow'`",
+]

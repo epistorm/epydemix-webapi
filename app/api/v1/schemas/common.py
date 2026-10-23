@@ -3,58 +3,57 @@
 This module defines shared response schemas used by multiple endpoints.
 """
 
-from pydantic import BaseModel
+from datetime import date
+from typing import Annotated
+
+from pydantic import AfterValidator, BaseModel, Field
+
+
+def _check_date(value: str) -> str:
+    """Accept only real calendar dates written as ``YYYY-MM-DD``."""
+    try:
+        valid = date.fromisoformat(value).isoformat() == value
+    except ValueError:
+        valid = False
+    if not valid:
+        raise ValueError(f"'{value}' is not a valid date in YYYY-MM-DD format")
+    return value
+
+
+DateStr = Annotated[str, AfterValidator(_check_date)]
 
 
 class ErrorResponse(BaseModel):
-    """Standard error response schema.
+    """Standard error response schema."""
 
-    Attributes
-    ----------
-    detail : str
-        Human-readable error message.
-    """
-
-    detail: str
+    detail: str = Field(
+        ...,
+        description="Human-readable error message.",
+        examples=["Population 'Mars' not found."],
+    )
 
 
 class HealthResponse(BaseModel):
-    """Health check response schema.
+    """Health check response schema."""
 
-    Attributes
-    ----------
-    status : str
-        Health status (e.g., 'healthy').
-    version : str
-        API version string.
-    epydemix_version : str or None
-        Version of the epydemix library, or None if not available.
-    """
-
-    status: str
-    version: str
-    epydemix_version: str | None = None
+    status: str = Field(..., description="Health status.", examples=["healthy"])
+    version: str = Field(..., description="API version string.", examples=["0.2.2"])
+    epydemix_version: str | None = Field(
+        default=None,
+        description="Version of the epydemix library, or None if not available.",
+        examples=["0.3.4"],
+    )
 
 
 class CacheInfoResponse(BaseModel):
-    """Cache information response schema.
+    """Cache information response schema."""
 
-    Attributes
-    ----------
-    hits : int
-        Number of cache hits.
-    misses : int
-        Number of cache misses.
-    maxsize : int
-        Maximum cache size.
-    currsize : int
-        Current number of cached items.
-    cached_populations : list of str
-        Names of populations currently in cache.
-    """
-
-    hits: int
-    misses: int
-    maxsize: int
-    currsize: int
-    cached_populations: list[str]
+    hits: int = Field(..., description="Number of cache hits.", examples=[42])
+    misses: int = Field(..., description="Number of cache misses.", examples=[8])
+    maxsize: int = Field(..., description="Maximum cache size.", examples=[50])
+    currsize: int = Field(..., description="Current number of cached items.", examples=[10])
+    cached_populations: list[str] = Field(
+        ...,
+        description="Names of populations currently in cache.",
+        examples=[["United_States", "Italy", "Germany"]],
+    )

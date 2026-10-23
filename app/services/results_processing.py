@@ -14,14 +14,16 @@ from ..api.v1.schemas.simulation import (
     CompartmentResults,
     OutputConfig,
     PeakStatistic,
-    SummaryConfig,
+    SimulationResultsData,
+    StatisticQuantiles,
     SummaryResults,
-    SummaryStatistic,
     TrajectoriesResults,
     TrajectoryData,
     TransitionResults,
 )
 from ..utils.column_utils import parse_column_name
+
+DEFAULT_QUANTILES: list[float] = [0.025, 0.05, 0.25, 0.5, 0.75, 0.95, 0.975]
 
 
 def build_quantile_hierarchy(
@@ -138,87 +140,113 @@ def extract_trajectories(
     return TrajectoriesResults(dates=dates, runs=runs)
 
 
+def _format_date(date_val) -> str | None:
+    """Format a date value as YYYY-MM-DD, returning None for NaT."""
+    ts = pd.Timestamp(date_val)
+    if pd.isna(ts):
+        return None
+    return ts.strftime("%Y-%m-%d")
+
+
+def _resolve_age_groups(
+    requested: list[str] | None,
+    available: list[str],
+) -> list[str]:
+    """Resolve the age groups to compute summary stats for.
+
+    ``available`` is the canonical list of age-group names (typically
+    ``population.Nk_names`` + ``"total"``); we don't infer it by stripping
+    keys from the stacked dict because that breaks for V-SEIHR-style models
+    where compartment names can have a ``_vax`` suffix that overlaps an
+    unrelated compartment's prefix (e.g. ``Susceptible_vax_0-4`` would
+    masquerade as age group ``vax_0-4`` under base ``Susceptible``).
+    """
+    if requested is None:
+        return list(available)
+    return [g for g in requested if g in available]
+
+
 def compute_summary(
     results: SimulationResults,
-    summary_config: SummaryConfig | None,
+    peak_compartments: list[str],
+    total_transitions: list[str],
+    age_groups: list[str] | None,
+    quantiles: list[float],
+    population_age_groups: list[str],
 ) -> SummaryResults | None:
     """Compute summary statistics from simulation results.
 
-    Calculates peak statistics for specified compartments and total counts
-    for specified transitions across all simulation runs.
+    For each requested compartment or transition, emits per-quantile peak or
+    cumulative-total statistics per age group. Peaks additionally include a
+    `peak_date` from the median trajectory of that age group.
 
     Parameters
     ----------
     results : SimulationResults
         Simulation results from epydemix.
-    summary_config : SummaryConfig or None
-        Configuration specifying which compartments and transitions to
-        compute statistics for. If None, returns None.
+    peak_compartments : list of str
+        Base compartment names to compute peak statistics for. Empty list
+        disables peak computation.
+    total_transitions : list of str
+        Base transition names (e.g. `S_to_I`) to compute cumulative totals
+        for. Empty list disables total computation.
+    age_groups : list of str or None
+        Age groups to include. `None` means every age group that has data
+        (ordered as they appear in the simulation, with `total` last).
+    quantiles : list of float
+        Quantiles to compute for each statistic (e.g. `[0.025, 0.5, 0.975]`).
 
     Returns
     -------
     SummaryResults or None
-        Summary statistics with peaks and totals, or None if no config
-        provided or no statistics could be computed.
+        Summary statistics, or None if neither peaks nor totals were
+        computed (for example, both input lists were empty).
     """
-    if summary_config is None:
-        return None
+    peaks: dict[str, dict[str, PeakStatistic]] = {}
+    totals: dict[str, dict[str, StatisticQuantiles]] = {}
 
-    peaks: dict[str, PeakStatistic] = {}
-    totals: dict[str, SummaryStatistic] = {}
+    available_age_groups = list(population_age_groups) + ["total"]
 
-    # Compute peak statistics for requested compartments
-    if summary_config.peak_compartments:
+    if peak_compartments:
         stacked = results.get_stacked_compartments()
-        for comp_name in summary_config.peak_compartments:
-            # Try with _total suffix first, then without
-            comp_key = f"{comp_name}_total"
-            if comp_key not in stacked:
-                comp_key = comp_name
-                if comp_key not in stacked:
+        resolved_groups = _resolve_age_groups(age_groups, available_age_groups)
+        for comp_name in peak_compartments:
+            peak_by_group: dict[str, PeakStatistic] = {}
+            for age_group in resolved_groups:
+                key = f"{comp_name}_{age_group}"
+                if key not in stacked:
                     continue
+                comp_data = stacked[key]  # shape: (Nsim, timesteps)
+                peak_per_sim = np.max(comp_data, axis=1)
+                quantile_values = {str(q): float(np.quantile(peak_per_sim, q)) for q in quantiles}
 
-            comp_data = stacked[comp_key]  # Shape: (Nsim, timesteps)
+                median_traj = np.median(comp_data, axis=0)
+                peak_idx = int(np.argmax(median_traj))
+                peak_date = None
+                if len(results.dates) > peak_idx:
+                    peak_date = _format_date(results.dates[peak_idx])
 
-            peak_per_sim = np.max(comp_data, axis=1)
-            peak_median = float(np.median(peak_per_sim))
-            peak_ci = [
-                float(np.percentile(peak_per_sim, 2.5)),
-                float(np.percentile(peak_per_sim, 97.5)),
-            ]
+                peak_by_group[age_group] = PeakStatistic(
+                    quantiles=quantile_values, peak_date=peak_date
+                )
+            if peak_by_group:
+                peaks[comp_name] = peak_by_group
 
-            # Find peak date (use median trajectory)
-            median_traj = np.median(comp_data, axis=0)
-            peak_idx = int(np.argmax(median_traj))
-            peak_date = None
-            if len(results.dates) > 0:
-                date_val = results.dates[peak_idx]
-                peak_date = pd.Timestamp(date_val).strftime("%Y-%m-%d")
-
-            peaks[comp_name] = PeakStatistic(
-                median=peak_median, ci_95=peak_ci, peak_date=peak_date
-            )
-
-    # Compute total counts for requested transitions
-    if summary_config.total_transitions:
+    if total_transitions:
         trans_stacked = results.get_stacked_transitions()
-        for trans_name in summary_config.total_transitions:
-            # Try with _total suffix first, then without
-            trans_key = f"{trans_name}_total"
-            if trans_key not in trans_stacked:
-                trans_key = trans_name
-                if trans_key not in trans_stacked:
+        resolved_groups = _resolve_age_groups(age_groups, available_age_groups)
+        for trans_name in total_transitions:
+            total_by_group: dict[str, StatisticQuantiles] = {}
+            for age_group in resolved_groups:
+                key = f"{trans_name}_{age_group}"
+                if key not in trans_stacked:
                     continue
-
-            trans_data = trans_stacked[trans_key]
-            total_per_sim = np.sum(trans_data, axis=1)
-            totals[trans_name] = SummaryStatistic(
-                median=float(np.median(total_per_sim)),
-                ci_95=[
-                    float(np.percentile(total_per_sim, 2.5)),
-                    float(np.percentile(total_per_sim, 97.5)),
-                ],
-            )
+                trans_data = trans_stacked[key]
+                total_per_sim = np.sum(trans_data, axis=1)
+                quantile_values = {str(q): float(np.quantile(total_per_sim, q)) for q in quantiles}
+                total_by_group[age_group] = StatisticQuantiles(quantiles=quantile_values)
+            if total_by_group:
+                totals[trans_name] = total_by_group
 
     if not peaks and not totals:
         return None
@@ -299,8 +327,27 @@ def process_results(
     )
     transition_results = TransitionResults(dates=dates, data=trans_data)
 
-    # Compute summary statistics
-    summary = compute_summary(results, output_config.summary)
+    # Compute summary statistics. Default to all compartments/transitions when
+    # the user did not specify a field; an empty list is an explicit opt-out.
+    user_summary = output_config.summary
+    resolved_peaks = (
+        user_summary.peak_compartments
+        if user_summary is not None and user_summary.peak_compartments is not None
+        else compartment_names
+    )
+    resolved_totals = (
+        user_summary.total_transitions
+        if user_summary is not None and user_summary.total_transitions is not None
+        else transition_names
+    )
+    summary = compute_summary(
+        results,
+        peak_compartments=resolved_peaks,
+        total_transitions=resolved_totals,
+        age_groups=output_config.age_groups,
+        quantiles=output_config.quantiles or DEFAULT_QUANTILES,
+        population_age_groups=[str(name) for name in model.population.Nk_names],
+    )
 
     # Include raw trajectories if requested
     trajectories = None

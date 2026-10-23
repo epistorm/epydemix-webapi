@@ -55,6 +55,33 @@ code {
   border-bottom: 1px solid var(--ifm-color-emphasis-200);
 }
 
+.navbar__items .navbar-github-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 0;
+  font-size: 0;
+}
+
+.navbar__items .navbar-github-link::before {
+  width: 1.45rem;
+  height: 1.45rem;
+  content: '';
+  background-color: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg viewBox='0 0 98 96' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='black' fill-rule='evenodd' clip-rule='evenodd' d='M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.141-22.243-5.378-22.243-24.283 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.014 7.822 5.014 13.2 0 18.905-11.404 23.06-22.324 24.283 1.78 1.548 3.316 4.482 3.316 9.126 0 6.6-.08 11.897-.08 13.527 0 1.303.89 2.852 3.316 2.363C83.956 89.389 98 70.973 98 49.217 98 22 76.839 0 48.854 0Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg viewBox='0 0 98 96' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill='black' fill-rule='evenodd' clip-rule='evenodd' d='M48.854 0C21.839 0 0 22 0 49.217c0 21.756 13.993 40.172 33.405 46.69 2.427.49 3.316-1.059 3.316-2.362 0-1.141-.08-5.052-.08-9.127-13.59 2.934-16.42-5.867-16.42-5.867-2.184-5.704-5.42-7.17-5.42-7.17-4.448-3.015.324-3.015.324-3.015 4.934.326 7.523 5.052 7.523 5.052 4.367 7.496 11.404 5.378 14.235 4.074.404-3.178 1.699-5.378 3.074-6.6-10.839-1.141-22.243-5.378-22.243-24.283 0-5.378 1.94-9.778 5.014-13.2-.485-1.222-2.184-6.275.486-13.038 0 0 4.125-1.304 13.426 5.052a46.97 46.97 0 0 1 12.214-1.63c4.125 0 8.33.571 12.213 1.63 9.302-6.356 13.427-5.052 13.427-5.052 2.67 6.763.97 11.816.485 13.038 3.155 3.422 5.014 7.822 5.014 13.2 0 18.905-11.404 23.06-22.324 24.283 1.78 1.548 3.316 4.482 3.316 9.126 0 6.6-.08 11.897-.08 13.527 0 1.303.89 2.852 3.316 2.363C83.956 89.389 98 70.973 98 49.217 98 22 76.839 0 48.854 0Z'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.navbar-github-link::after {
+  display: none;
+}
+
+.navbar-github-link > svg {
+  display: none;
+}
+
 /* Container spacing */
 .container {
   padding-left: 2.5rem;
@@ -76,4 +103,100 @@ code {
 /* Footer */
 [data-theme='dark'] .footer {
   background-color: #0f0f0f;
+}
+
+/* Center figures and tables in doc pages */
+.markdown img {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.markdown table {
+  width: fit-content;
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Wrap long lines in `text` code blocks (e.g. prompts), but keep code-like
+ * languages (json, bash, python) horizontally scrollable so indentation reads
+ * correctly. */
+pre.language-text,
+pre.language-text code {
+  white-space: pre-wrap !important;
+  word-break: break-word;
+}
+
+/* Tighten Docusaurus Tabs — defaults leave too much whitespace between the
+ * tab row and the content panel. Avoid touching the active-tab indicator
+ * (default uses negative margins that interact with overflow-x: auto on the
+ * tabs row and produce a stray scrollbar). */
+.tabs-container {
+  margin-bottom: 1rem;
+}
+
+.tabs__item {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.9rem;
+}
+
+.tabs-container > div[role='tabpanel'] {
+  padding-top: 0.6rem;
+}
+
+/* Trim the typical first/last child margins inside a tab panel so the content
+ * doesn't double up with the panel's own padding. */
+.tabs-container > div[role='tabpanel'] > :first-child {
+  margin-top: 0;
+}
+
+.tabs-container > div[role='tabpanel'] > :last-child {
+  margin-bottom: 0;
+}
+
+/* Neutralize the default blue tint on <details className="quiet"> blocks so
+ * embedded examples and derivations read as quiet asides rather than info
+ * admonitions. Docusaurus's <Details> component applies .alert--info, which
+ * drives the background via --ifm-alert-background-color; override those vars
+ * instead of background-color so the cascade actually wins. Opt-in via
+ * className="quiet". */
+.markdown details.quiet {
+  --ifm-alert-background-color: var(--ifm-background-color);
+  --ifm-alert-background-color-highlight: transparent;
+  --ifm-alert-border-color: var(--ifm-color-emphasis-300);
+  --ifm-alert-foreground-color: var(--ifm-color-content);
+  --docusaurus-details-decoration-color: var(--ifm-color-emphasis-400);
+}
+
+[data-theme='light'] .markdown details.quiet {
+  --ifm-alert-background-color: #fff;
+}
+
+/* Sidebar: when collapsed, hide the strip entirely. Use overflow: hidden
+ * (instead of clip-path) so the 300px sidebar content gets clipped during the
+ * width transition (no ghost), while the fixed-position ExpandButton escapes
+ * the clip and remains visible. The hashed module classes are matched with
+ * [class*=] so the override survives hash changes. */
+@media (min-width: 997px) {
+  aside[class*='docSidebarContainerHidden'] {
+    width: 0 !important;
+    border-right: none !important;
+    clip-path: none !important;
+    overflow: hidden !important;
+    cursor: default !important;
+  }
+
+  /* Make room for the floating expand button on the left when the sidebar
+   * is collapsed so the doc body (breadcrumbs, title, markdown) doesn't sit
+   * underneath it. Shift the whole <article> so all elements move together. */
+  main[class*='docMainContainerEnhanced'] article {
+    padding-left: 32px;
+  }
+
+  /* Reserve space at the bottom of the sidebar so its last items aren't
+   * hidden behind the fixed-position CollapseButton. */
+  .theme-doc-sidebar-container nav.menu {
+    padding-bottom: 60px;
+  }
 }

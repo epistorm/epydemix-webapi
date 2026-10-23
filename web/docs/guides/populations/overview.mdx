@@ -1,0 +1,71 @@
+---
+sidebar_position: 1
+---
+
+# Overview
+
+## What is a population?
+
+A population defines **who is being simulated** and **how they mix**. Every simulation in epydemix is age-stratified, meaning that compartments and transitiosn are tracked separately for each age group, and the contact matrices control transmission between groups.
+
+Specifically, a population provides:
+- **Population demographics by age group**: named age bins with a population count each (e.g. `0-4`, `5-19`, `20-49`, `50-64`, `65+`).
+- **Contact matrices by age group**: one square matrix per layer (`home`, `work`, `school`, `community`), where entry $(i, j)$ is the average number of contacts a person in group $i$ has with people in group $j$.
+
+You can either pick a built-in [population preset](./presets.mdx) (real-world demographics and contact data for a specific country or subnational region, such as a US state) or define a [custom population](./custom-populations.mdx) inline.
+
+## Contact Matrix
+The contact matrix is what lets the model capture **heterogeneity of contacts across age groups**. In real data, the diagonal is typically the largest entry (people interact most with peers their own age, **assortative mixing**), and the strength varies by setting. The `school` layer is dominated by contacts among school-age groups, `work` is concentrated in working-age groups, and `home` mixes parents with children. Splitting contacts by layer makes this structure explicit, and lets [interventions](../running-a-simulation.mdx) target a single setting (e.g. closing schools) without touching the others.
+
+A force of infection is computed by combining the contact matrices with the proportion of infectious individuals in each group, so age structure shapes both who gets infected first and the overall epidemic shape. Parameters like `transmission_rate` can also be specified per age group; see [Parameters](../model/parameters/overview.mdx).
+
+## Example: Age-stratified SIR
+
+Let's look at an example of how the contact matrix is used in actual epidemic models. The following is an deterministic ordinary differential equations for age-stratified SIR model, which is the mean-field equivalent of the stochastic simulation of our [SIR preset](../model/presets/sir.mdx). Note that the simulations in this API are fully **stochastic**: at each time step, transitions between compartments are drawn from binomial distributions, and `Nsim` independent runs are executed.
+
+### Model
+
+With age groups indexed by $i = 1, \dots, n$:
+
+$$
+\begin{aligned}
+\frac{dS_i}{dt} &= -\lambda_i\, S_i \\
+\frac{dI_i}{dt} &= \lambda_i\, S_i - \mu\, I_i \\
+\frac{dR_i}{dt} &= \mu\, I_i
+\end{aligned}
+$$
+
+with the per-group force of infection
+
+$$
+\lambda_i = \beta \sum_{j=1}^{n} C_{ij}\, \frac{I_j}{N_j}.
+$$
+
+$S_i, I_i, R_i$ are the compartment counts in age group $i$, $N_i = S_i + I_i + R_i$ is the group size, $\beta$ is `transmission_rate`, $\mu$ is `recovery_rate`, and $C_{ij}$ is the average number of contacts a person in group $i$ has with people in group $j$, summed across the contact layers (`home`, `work`, `school`, `community`).
+
+The same pattern applies to any model: every compartment becomes a vector indexed by age group, and any mediated transition uses the contact matrix in its force-of-infection term. SEIR, SIS, and custom models with extra compartments all follow this structure.
+
+### Calibrating $\beta$ from $R_0$
+
+In the homogeneous (single-group) case, $R_0 = \beta / \mu$. With age stratification, the contact matrix takes over the role of "average contacts per person" and the relation becomes
+
+$$
+R_0 = \frac{\beta}{\mu}\, \rho(C),
+\qquad \text{equivalently} \qquad
+\beta = \frac{R_0\, \mu}{\rho(C)},
+$$
+
+where $\rho(C)$ is the **spectral radius (largest eigenvalue) of the overall contact matrix** (the sum of the layer matrices). The spectral radius is returned as `spectral_radius.overall` by [`GET /populations/{name}/contacts`](./presets.mdx#get-contact-matrices), so you can plug it straight in to pick a `transmission_rate` that targets a desired $R_0$.
+
+To do this calculation directly inside the request, use the reserved name `CONTACT_MATRIX_EIGENVALUE_ALL` (= $\rho(C)$) from a [calculated parameter](../model/parameters/overview.mdx#calculated-parameters):
+
+```json
+{
+  "parameters": {
+    "R0": 1.5,
+    "gamma": 0.1,
+    "recovery_rate": "gamma",
+    "transmission_rate": "R0 * gamma / CONTACT_MATRIX_EIGENVALUE_ALL"
+  }
+}
+```

@@ -1,0 +1,49 @@
+---
+title: v0.5.0
+date: 2026-05-04
+summary: |
+  - Support custom populations in simulation endpoint
+---
+
+import ReleaseHeader from '@site/src/components/ReleaseHeader';
+
+# v0.5.0
+
+<ReleaseHeader />
+
+## Overview
+- Add custom populations to `POST /api/v1/simulations`: define `age_groups` and `contact_matrices` directly in the request body
+- `metadata.population` in the response now carries `source` and `contact_matrices`
+
+## Simulations
+
+`POST /api/v1/simulations`
+
+### Custom populations
+
+The `population` block now accepts a `source` discriminator. The default `"builtin"` keeps the existing data-repo path; `"custom"` lets you define everything inline:
+
+```json
+{
+  "population": {
+    "source": "custom",
+    "name": "Custom Population 1",
+    "age_groups": {"A": 100000},
+    "contact_matrices": {"all": [[1.0]]}
+  }
+}
+```
+
+Existing payloads without a `source` field route to the builtin branch automatically:
+
+```json
+{"population": {"name": "United_States"}}
+```
+
+still validates and behaves exactly as before. No client changes required.
+
+## Documentation
+
+- New OpenAPI request example "SIR in custom population (homogeneous)" exercises the `"custom"` branch with a single-group, 1x1 contact matrix
+- `?format=md` query on any docs page returns the markdown source instead of the rendered HTML
+- `/llms-full.txt` now bundles the OpenAPI JSON spec alongside the doc-page content

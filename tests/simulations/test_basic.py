@@ -1,3 +1,6 @@
+"""Core simulation run paths: presets, custom model, interventions, seeds, trajectories, metadata."""
+
+
 def test_run_sir_simulation_with_preset(client):
     """Test running a basic SIR simulation using a preset."""
     request = {
@@ -25,9 +28,9 @@ def test_run_sir_simulation_with_preset(client):
     data = response.json()
     assert data["status"] == "completed"
     assert "simulation_id" in data
-    assert data["metadata"]["model_preset"] == "SIR"
-    assert data["metadata"]["population_name"] == "United_States"
-    assert data["metadata"]["n_simulations"] == 10
+    assert data["metadata"]["model"]["preset"] == "SIR"
+    assert data["metadata"]["population"]["name"] == "United_States"
+    assert data["metadata"]["simulation"]["Nsim"] == 10
 
     # Check results structure
     assert "results" in data
@@ -58,7 +61,7 @@ def test_run_seir_simulation(client):
 
     data = response.json()
     assert data["status"] == "completed"
-    assert "Exposed" in data["metadata"]["compartments"]
+    assert "Exposed" in data["metadata"]["model"]["compartments"]
 
 
 def test_simulation_with_intervention(client):
@@ -91,35 +94,6 @@ def test_simulation_with_intervention(client):
 
     data = response.json()
     assert data["status"] == "completed"
-
-
-def test_simulation_with_parameter_override(client):
-    """Test simulation with parameter override."""
-    request = {
-        "model": {
-            "preset": "SIR",
-        },
-        "population": {
-            "name": "United_States",
-        },
-        "simulation": {
-            "start_date": "2024-01-01",
-            "end_date": "2024-03-01",
-            "Nsim": 5,
-        },
-        "parameter_overrides": [
-            {
-                "parameter_name": "transmission_rate",
-                "start_date": "2024-01-15",
-                "end_date": "2024-01-30",
-                "value": 0.15,
-            }
-        ],
-    }
-
-    response = client.post("/api/v1/simulations", json=request)
-    assert response.status_code == 200
-    assert response.json()["status"] == "completed"
 
 
 def test_simulation_validation_error(client):
@@ -177,7 +151,7 @@ def test_custom_model_simulation(client):
 
     data = response.json()
     assert data["status"] == "completed"
-    assert data["metadata"]["compartments"] == ["S", "I", "R"]
+    assert data["metadata"]["model"]["compartments"] == ["S", "I", "R"]
 
 
 def test_simulation_with_custom_age_groups(client):
@@ -213,7 +187,11 @@ def test_simulation_with_custom_age_groups(client):
     data = response.json()
     assert data["status"] == "completed"
     # Custom age groups should result in 4 age groups
-    assert data["metadata"]["n_age_groups"] == 4
+    assert len(data["metadata"]["population"]["age_groups"]) == 4
+    assert (
+        data["metadata"]["population"]["age_group_mapping"]
+        == request["population"]["age_group_mapping"]
+    )
 
 
 def test_simulation_with_seed_reproducibility(client):
@@ -239,8 +217,8 @@ def test_simulation_with_seed_reproducibility(client):
     data1 = response1.json()
     data2 = response2.json()
 
-    assert data1["metadata"]["seed"] == 42
-    assert data2["metadata"]["seed"] == 42
+    assert data1["metadata"]["simulation"]["seed"] == 42
+    assert data2["metadata"]["simulation"]["seed"] == 42
 
     # Results should be identical with same seed
     assert data1["results"]["compartments"] == data2["results"]["compartments"]
@@ -271,8 +249,8 @@ def test_simulation_with_different_seeds(client):
     data1 = response1.json()
     data2 = response2.json()
 
-    assert data1["metadata"]["seed"] == 42
-    assert data2["metadata"]["seed"] == 123
+    assert data1["metadata"]["simulation"]["seed"] == 42
+    assert data2["metadata"]["simulation"]["seed"] == 123
 
     # Results should be different with different seeds
     assert data1["results"]["compartments"] != data2["results"]["compartments"]
@@ -314,6 +292,36 @@ def test_simulation_include_trajectories(client):
         assert "compartments" in run
         assert "transitions" in run
         # With age_groups=["total"], each compartment should only have "total" key
-        for comp_name, age_groups in run["compartments"].items():
+        for _comp_name, age_groups in run["compartments"].items():
             assert "total" in age_groups
             assert len(age_groups) == 1  # Only "total" age group
+
+
+def test_simulation_population_metadata(client):
+    """Population metadata should include total, per-age-group counts, and resolved contacts config."""
+    request = {
+        "model": {"preset": "SIR"},
+        "population": {"name": "United_States"},
+        "simulation": {
+            "start_date": "2024-01-01",
+            "end_date": "2024-01-10",
+            "Nsim": 3,
+        },
+    }
+
+    response = client.post("/api/v1/simulations", json=request)
+    assert response.status_code == 200
+
+    population = response.json()["metadata"]["population"]
+
+    assert population["name"] == "United_States"
+    assert population["total"] > 0
+    assert population["contacts_source"] is not None
+    assert population["layers"] == ["home", "work", "school", "community"]
+    assert population["age_group_mapping"] is None
+
+    age_groups = population["age_groups"]
+    assert isinstance(age_groups, dict)
+    assert len(age_groups) > 0
+    assert all(isinstance(v, int) for v in age_groups.values())
+    assert sum(age_groups.values()) == population["total"]

@@ -12,7 +12,7 @@ sidebar_label: Running the API Locally
 ## With uv
 
 ```bash
-git clone https://github.com/mu373/epydemix-webapi.git
+git clone https://github.com/epistorm/epydemix-webapi.git
 cd epydemix-webapi
 uv sync
 uv run uvicorn app.main:app --reload
@@ -39,7 +39,7 @@ curl http://localhost:8000/api/v1/health
 ```
 
 ```json
-{"status": "healthy", "version": "0.1.0", "epydemix_version": "1.0.0"}
+{"status": "healthy", "version": "0.1.1", "epydemix_version": "1.0.0"}
 ```
 
 Swagger UI is available at `http://localhost:8000/api/v1/docs`.
