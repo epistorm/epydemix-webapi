@@ -727,7 +727,7 @@ class SimulationRequest(BaseModel):
         Inconsistent inputs raise ValueError and produce an HTTP 422 response.
         """
         population = self.population
-        # Custom layers are matrix keys; builtin layers come from the selection or defaults.
+        # Check layers.
         if isinstance(population, CustomPopulationConfig):
             layers = list(population.contact_matrices)
         else:
@@ -739,7 +739,7 @@ class SimulationRequest(BaseModel):
                     f"contact layer of the population. Layers are {layers}."
                 )
         initial = self.initial_conditions
-        # Absolute counts need one entry per age group; a single count is not broadcast.
+        # Check initial count lengths.
         # Builtin group counts are checked after loading in create_initial_conditions.
         if (
             isinstance(population, CustomPopulationConfig)
