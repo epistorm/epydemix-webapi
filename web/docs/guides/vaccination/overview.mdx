@@ -1,0 +1,141 @@
+---
+sidebar_position: 1
+---
+
+import EndpointSelector from '@site/src/components/EndpointSelector';
+
+# Overview
+
+<EndpointSelector />
+
+Vaccination moves individuals between compartments: a **donor pool** (typically `Susceptible`) and a **vaccinated counterpart** (typically `Susceptible_vax`), in the age groups a campaign targets and during its time window. Protection comes from the vaccinated layer using attenuated parameters (lower susceptibility, lower severity, etc.).
+
+## Quick start
+
+The `vaccination` block of the API request only defines the rollout (e.g., schedule, doses, targets, flows), and the actual effects from vaccination are modeled with [`parameters` from the `model` block](../model/parameters/overview.mdx).
+
+The vaccination model presets ([`V-SEIR`](../model/presets/v-seir.mdx), [`V-SEIHR`](../model/presets/v-seihr.mdx)) are the built-in examples that use the vaccination feature: they expose a vaccinated branch of compartments with `VE_S` (and `VE_H` for V-SEIHR) efficacy parameters, and vaccination by default generates the flow `Susceptible → Susceptible_vax`.
+
+```json5
+{
+  "model": {
+    "preset": "V-SEIHR",
+    "parameters": {
+      "R0": 2.5,
+      "incubation_period": 3.0,
+      "infectious_period": 2.5,
+      "hosp_duration": 5.0,
+      "hosp_proportion": 0.05,
+      "VE_S": 0.7, // vaccine efficacy against infection
+      "VE_H": 0.85
+    }
+  },
+  "population": {"name": "United_States"},
+  "simulation": {"start_date": "2025-01-01", "end_date": "2025-06-30", "Nsim": 10},
+  "vaccination": {
+    // "flows" is optional on vaccination presets (defaults to S → S_vax pair); set it to override.
+    // "flows": [{"source": "Susceptible", "target": "Susceptible_vax"}],
+    "campaigns": [
+      {
+        "start_date": "2025-02-01",
+        "end_date":   "2025-04-30",
+        "rollout": {"type": "flat_count", "daily_doses": 100000}
+      }
+    ]
+  }
+}
+```
+
+## `vaccination` block
+
+The block declares which compartments are involved in the rollout (`flows`) and which campaigns drive doses (`campaigns`). On the vaccination presets the default flow is `Susceptible → Susceptible_vax`; custom models must declare flows explicitly.
+
+| Field | Required | Description |
+|---|---|---|
+| `flows` | for custom models | List of `{source, target}` compartment pairs. Vaccination presets default to `Susceptible → Susceptible_vax`. See [Flows](#flows) for shapes (including dose sinks) and validation. |
+| `campaigns` | yes (≥1) | List of campaigns, each with its own dates, target age groups, and dose schedule. Multiple campaigns may overlap and their per-step dose schedules add. See [Campaigns](./campaigns.mdx) for the per-campaign fields and rollout strategies. |
+
+
+## From doses to a per-individual rate
+
+### Rate calculation
+Each campaign turns a daily **dose budget** $d_c(t)$ into a per-individual vaccination rate $r_c(t)$ by spreading those doses across the **live eligible pool**:
+
+$$
+r_c(t) = \frac{d_c(t)}{\displaystyle\sum_{X \in \mathcal{S}}\;\sum_{j \in \mathcal{A}_c} X_j(t)}.
+$$
+
+Here $\mathcal{A}_c$ is the set of age groups campaign $c$ targets, $\mathcal{S}$ is the set of source compartments configured in `flows`, and $X_j(t)$ is the live count in source $X$ and age group $j$ at step $t$. The denominator is recomputed every step, so it tracks the pool as people leave or re-enter. In the simplest case (a single `Susceptible → Susceptible_vax` flow), it collapses to "daily doses divided by live susceptibles".
+
+### Flows
+
+`flows` is a list of `{source, target}` pairs naming which compartments compete for doses and where vaccinated individuals move to. Every `source` contributes to the rate denominator above, and every flow with a non-null `target` emits a `source → target` transition. Entries with `target: null` are **dose sinks**: they shrink the rate denominator without moving anyone, useful when real campaigns can't pre-screen recipients (doses landing on already-recovered people are still consumed).
+
+A few common shapes:
+
+```json5
+// 1. Perfect targeting (vaccination-preset default).
+"flows": [{"source": "Susceptible", "target": "Susceptible_vax"}]
+
+// 2. Dose sink: S + R compete for doses but only S transitions.
+// Models a real-world campaign that cannot pre-screen recipients.
+"flows": [
+  {"source": "Susceptible", "target": "Susceptible_vax"},
+  {"source": "Recovered",   "target": null}
+]
+
+// 3. Multi-target: one budget shared across two susceptible strata.
+// Each source draws from the shared budget in proportion to its live size,
+// and each pair emits its own `<source>_to_<target>` transition at the same
+// per-individual rate.
+"flows": [
+  {"source": "Susceptible",   "target": "Susceptible_vax"},
+  {"source": "Susceptible_2", "target": "Susceptible_2_vax"}
+]
+```
+
+For example with shape #2: 4,000 susceptibles and 56,000 recovered sharing 1,000 daily doses yield an expected `S → S_vax` count of $1{,}000 \times 4{,}000 / 60{,}000 \approx 67$; the rest are absorbed by `R`.
+
+
+## Dose allocation
+
+The per-individual rate is **shared** across all targeted groups and sources, so each (source, group) cell receives doses in proportion to its live population. With a single flow `[{S, S_vax}]`, a `flat_count` campaign targeting two age groups holding 4,000 and 6,000 susceptibles and a 1,000-dose-per-day budget delivers 400 and 600 doses respectively (in expectation).
+
+At each step the simulator updates each source compartment independently with a multinomial draw over all of its out-edges. Every active vaccination flow leaving $X$ contributes the campaign rate $r_c(t)$ from above, alongside any non-vaccination rates $q^{X,k}_i(t)$ on the same source (e.g. infection $S \to E$).
+
+Bundling them into the total per-individual out-rate
+
+$$
+H_i^{X}(t) \;=\; \underbrace{\sum_{c\,:\,i \in \mathcal{A}_c,\,X \in \mathcal{S}_c} r_c(t)}_{\text{vaccination}} \;+\; \underbrace{\sum_{k} q^{X,k}_i(t)}_{\text{other out-edges}},
+$$
+
+the per-step counts out of $X_i$ are sampled jointly as
+
+$$
+\bigl(\Delta_{\text{stay},i},\ \Delta_{Z_1,i},\ \Delta_{Z_2,i},\ \ldots\bigr) \;\sim\; \mathrm{Multinomial}\bigl(X_i(t),\ \mathbf{p}_i\bigr),
+$$
+
+where $\{Z_k\}$ enumerates the destinations reachable from $X$ (the vaccination target $Y$ is one of them) and $\mathbf{p}_i$ splits the total leave probability $1 - e^{-H_i^{X}\,dt}$ among them in proportion to each edge's rate.
+
+In expectation, $Y$ thus receives
+
+$$
+\mathbb{E}[\Delta Y_i(t)] \;\approx\; r_c(t)\,X_i(t)\,dt,
+$$
+
+If vaccination is the only out-edge of $X_i$, the multinomial draw reduces to a binomial draw.
+
+
+## Vaccine efficacy
+
+How much protection vaccination confers is a property of the **model**, not the rollout block. The vaccination presets ([`V-SEIR`](../model/presets/v-seir.mdx#vaccine-efficacy), [`V-SEIHR`](../model/presets/v-seihr.mdx#vaccine-efficacy)) define `VE_S` (against infection); V-SEIHR additionally defines `VE_H` (against hospitalization). See the preset pages for how they enter the dynamics. Custom models can mirror the same pattern with their own efficacy expressions.
+
+## Inspecting the rollout
+
+Each transitioning flow surfaces as a regular transition in the response. For the default vaccination-preset rollout, look for `Susceptible_to_Susceptible_vax` under `results.transitions.data`. Note that flows with dose sinks (`target: null`) emit no transition.
+
+The request itself is echoed back under `metadata.vaccination`, including the resolved `flows` list.
+
+:::tip
+Use the [API Reference](/api-reference) to explore the vaccination schema field-by-field and try requests interactively.
+:::

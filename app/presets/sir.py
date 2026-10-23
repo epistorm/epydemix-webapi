@@ -1,0 +1,73 @@
+"""SIR preset: model builder + registry definition."""
+
+from __future__ import annotations
+
+from epydemix.model.epimodel import EpiModel
+
+from ..utils.parameter_conversions import ParameterConversion
+from ._build import add_transitions
+
+
+COMPARTMENTS: list[str] = ["Susceptible", "Infected", "Recovered"]
+
+# ``R0`` is a source default: ``PARAMETER_CONVERSIONS`` below derives
+# ``transmission_rate = R0 * recovery_rate / CONTACT_MATRIX_EIGENVALUE_ALL``
+# from the chosen population's contact matrix. An explicit
+# ``transmission_rate`` in the request wins and drops the ``R0`` default.
+DEFAULT_PARAMETERS: dict[str, float] = {
+    "R0": 2.5,
+    "recovery_rate": 0.1,
+}
+
+DESCRIPTION: str = (
+    "Basic Susceptible-Infected-Recovered model. "
+    "Suitable for diseases with permanent immunity after recovery."
+)
+
+TRANSITIONS: list[dict] = [
+    {
+        "source": "Susceptible",
+        "target": "Infected",
+        "kind": "mediated",
+        "params": ["transmission_rate", "Infected"],
+    },
+    {
+        "source": "Infected",
+        "target": "Recovered",
+        "kind": "spontaneous",
+        "params": ["recovery_rate"],
+    },
+]
+
+# Friendlier source inputs the user can supply instead of the rate-form
+# parameters above. Resolved by ``app.utils.parameter_conversions``: when the
+# source is in ``model.parameters`` and the user did not pass the derived
+# directly, the expression is injected as a calc-param.
+PARAMETER_CONVERSIONS: dict[str, ParameterConversion] = {
+    "recovery_rate": ParameterConversion("infectious_period", "1 / infectious_period"),
+    "transmission_rate": ParameterConversion(
+        "R0", "R0 * recovery_rate / CONTACT_MATRIX_EIGENVALUE_ALL"
+    ),
+}
+
+
+def build_sir_model(
+    user_scalars: dict[str, float],
+) -> tuple[EpiModel, dict[str, str]]:
+    """Construct an SIR model with user scalar overrides.
+
+    Returns ``(model, preset_calc_params)``. The preset itself defines no
+    calculated parameters; period→rate and R0→β conversions are handled by
+    the preset-scoped resolver in ``app.utils.parameter_conversions``.
+
+    Age-varying (list) and expression-valued parameters are applied by the
+    pipeline in ``simulation_service.run_simulation`` after the population is
+    resolved; this builder only handles scalars.
+    """
+    merged = {**DEFAULT_PARAMETERS, **user_scalars}
+    model = EpiModel(compartments=COMPARTMENTS)
+    for name, value in merged.items():
+        model.add_parameter(parameter_name=name, value=float(value))
+
+    add_transitions(model, TRANSITIONS)
+    return model, {}

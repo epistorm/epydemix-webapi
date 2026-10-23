@@ -1,0 +1,81 @@
+---
+title: v0.7.0
+date: 2026-05-18
+summary: |
+  - New `V-SEIHR` model preset with a vaccinated branch and `VE_S` / `VE_H` efficacy parameters
+  - New top-level `vaccination` block: campaigns, age targeting, dose-sink flows, multi-target rollouts
+  - Per-preset registry: each preset owns its parameter conversions and defaults
+---
+
+import ReleaseHeader from '@site/src/components/ReleaseHeader';
+
+# v0.7.0
+
+<ReleaseHeader />
+
+## Overview
+- Add the **`V-SEIHR`** model preset: Susceptible-Exposed-Infected-Hospitalized-Recovered with a parallel **vaccinated branch** and two efficacy parameters (`VE_S` against susceptibility, `VE_H` against hospitalization)
+- Add a top-level **`vaccination`** block to `POST /simulations`: declarative campaigns that turn a daily dose budget into a per-individual vaccination rate, with age-group targeting, multiple overlapping campaigns, dose sinks, and multi-target flows
+
+## Simulations
+
+`POST /api/v1/simulations`
+
+### New model preset: `V-SEIHR`
+
+The new `V-SEIHR` model preset is a SEIHR model with a vaccinated twin of every compartment (`Susceptible_vax`, `Exposed_vax`, `Infected_vax`, `Hospitalized_vax`, `Recovered_vax`). Vaccinated susceptibles see an attenuated force of infection and vaccinated infected hospitalize at a reduced rate:
+
+$$
+\lambda^{\text{vax}}_i(t) = (1 - \mathrm{VE_S}) \cdot \lambda_i(t),
+\qquad
+p_H^{\text{vax}} = (1 - \mathrm{VE_H}) \cdot p_H.
+$$
+
+Vaccinated infectious individuals transmit at the *same* per-contact rate as unvaccinated; the reduction sits on susceptibility, not transmissibility.
+
+Without a `vaccination` block the vaccinated branch stays at zero for the whole run and V-SEIHR behaves like plain SEIHR.
+
+See the [V-SEIHR preset page](/docs/guides/model/presets/v-seihr) for the full transition table, ODE form, parameter reference, and examples.
+
+### Vaccination block
+
+A new top-level `vaccination` object drives doses through the model:
+
+```json5
+{
+  "model": {
+    "preset": "V-SEIHR",
+    "parameters": {"R0": 2.5, "VE_S": 0.7, "VE_H": 0.85}
+  },
+  "population": {"name": "United_States"},
+  "simulation": {"start_date": "2025-01-01", "end_date": "2025-06-30", "Nsim": 10},
+  "vaccination": {
+    "campaigns": [
+      {
+        "start_date": "2025-02-01",
+        "end_date":   "2025-04-30",
+        "rollout": {"type": "flat_count", "daily_doses": 100000}
+      }
+    ]
+  }
+}
+```
+
+Each campaign turns a daily dose budget $d_c(t)$ into a per-individual rate by spreading those doses across the live eligible pool:
+
+$$
+r_c(t) = \frac{d_c(t)}{\displaystyle\sum_{X \in \mathcal{S}}\;\sum_{j \in \mathcal{A}_c} X_j(t)}.
+$$
+
+Each transitioning flow surfaces as a regular transition in the response (e.g. `Susceptible_to_Susceptible_vax` under `results.transitions.data`); flows with dose sinks emit no transition. The request is echoed back under `metadata.vaccination` with the resolved `flows` list.
+
+See the [Vaccination overview](/docs/guides/vaccination/overview) and [Campaigns page](/docs/guides/vaccination/campaigns) for the full details and custom-model usage.
+
+## Documentation
+
+- New **Vaccination** guide category with [Overview](/docs/guides/vaccination/overview) (rate calculation, flows, dose allocation, vaccine efficacy, inspecting the rollout) and [Campaigns](/docs/guides/vaccination/campaigns) (per-campaign fields, rollout strategies, multi-campaign stacking, custom-model usage)
+- New [V-SEIHR preset page](/docs/guides/model/presets/v-seihr) with compartments, transitions, equivalent ODE form, vaccine-efficacy math, parameter table, and three curl examples (with vaccination, without vaccination, with seasonality)
+- Model presets split into per-preset pages under `guides/model/presets/` ([SIR](/docs/guides/model/presets/sir), [SEIR](/docs/guides/model/presets/seir), [SIS](/docs/guides/model/presets/sis), [V-SEIHR](/docs/guides/model/presets/v-seihr))
+- Parameter docs grouped under `guides/model/parameters/` with an Overview and a dedicated Transformations page
+- Updated FAQ with cleaner structure
+- Added full text search

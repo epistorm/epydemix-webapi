@@ -4,6 +4,52 @@
   "buildCommand": "bun run build",
   "outputDirectory": "build",
   "redirects": [
-    { "source": "/", "destination": "/docs", "permanent": true }
+    {
+      "source": "/",
+      "destination": "/docs",
+      "permanent": true,
+      "missing": [
+        { "type": "header", "key": "accept", "value": ".*text/markdown.*" }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/llms.txt",
+      "has": [
+        { "type": "header", "key": "accept", "value": ".*text/markdown.*" }
+      ]
+    },
+    {
+      "source": "/docs/:path+",
+      "destination": "/docs/:path+.md",
+      "has": [
+        { "type": "header", "key": "accept", "value": ".*text/markdown.*" }
+      ]
+    }
+  ],
+  "headers": [
+    {
+      "source": "/",
+      "has": [
+        { "type": "header", "key": "accept", "value": ".*text/markdown.*" }
+      ],
+      "headers": [
+        { "key": "Content-Type", "value": "text/markdown; charset=utf-8" }
+      ]
+    },
+    {
+      "source": "/llms.txt",
+      "headers": [
+        { "key": "Content-Type", "value": "text/markdown; charset=utf-8" }
+      ]
+    },
+    {
+      "source": "/llms-full.txt",
+      "headers": [
+        { "key": "Content-Type", "value": "text/markdown; charset=utf-8" }
+      ]
+    }
   ]
 }

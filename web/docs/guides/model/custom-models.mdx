@@ -1,0 +1,106 @@
+---
+sidebar_position: 2
+---
+
+import EndpointSelector from '@site/src/components/EndpointSelector';
+import CurlBlock from '@site/src/components/CurlBlock';
+
+# Custom Models
+
+<EndpointSelector />
+
+Instead of using a preset, you can define your own compartmental model by specifying compartments, parameters, and transitions. See the [API Reference](/api-reference) for the full request schema.
+
+## Model structure
+
+A custom model requires three things: `compartments`, `parameters`, and `transitions`.
+
+### Compartments
+
+A list of states that individuals can be in. The first compartment is treated as the default state for the remaining population when setting initial conditions.
+
+```json
+"compartments": ["S", "E", "I", "R", "H"]
+```
+
+### Parameters
+
+Named rate values referenced by transitions. Each key is a parameter name and the value is its rate. All parameters used in transitions must be defined here.
+
+```json
+"parameters": {
+  "transmission_rate": 0.3,
+  "recovery_rate": 0.1,
+  "incubation_rate": 0.2,
+  "hospitalization_rate": 0.05,
+  "recovery_rate_h": 0.15
+}
+```
+
+### Transitions
+
+Rules for how individuals move between compartments. Each transition has a `source`, `target`, `kind`, and `params`. The `source` and `target` must match compartment names defined above.
+
+There are two kinds:
+
+- **Spontaneous**: occurs at a fixed rate, independent of other compartments. `params` is a single parameter name.
+- **Mediated**: rate depends on the proportion of individuals in another compartment. `params` is a two-element list `[rate_parameter, mediating_compartment]`.
+
+The rate parameter must be defined in `parameters`, and the mediating compartment must be one of `compartments`. Otherwise the request is rejected with a `422`. After expressions and transforms are evaluated, every transition rate must be finite and non-negative. Rates above 1 are allowed.
+
+Examples:
+
+```json
+"transitions": [
+  {"source": "I", "target": "R", "kind": "spontaneous", "params": "recovery_rate"},
+  {"source": "S", "target": "E", "kind": "mediated", "params": ["transmission_rate", "I"]}
+]
+```
+
+## Example: SEIRH model
+
+This model extends SEIR with a hospitalized compartment. Infected individuals may either recover directly or be hospitalized first. The example below seeds 0.1% of the population as `I` at t=0 via an explicit `initial_conditions` block; the rest starts in `S`. See [Initial Conditions](../initial-conditions.mdx) for other seeding options. Custom models have no built-in default. If you omit the block, epydemix's fallback is used, but it can misspecify the initial state for some model structures.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "compartments": ["S", "E", "I", "R", "H"],
+      "parameters": {
+        "transmission_rate": 0.3,
+        "incubation_rate": 0.2,
+        "recovery_rate": 0.1,
+        "hospitalization_rate": 0.05,
+        "recovery_rate_h": 0.15
+      },
+      "transitions": [
+        {"source": "S", "target": "E", "kind": "mediated", "params": ["transmission_rate", "I"]},
+        {"source": "E", "target": "I", "kind": "spontaneous", "params": "incubation_rate"},
+        {"source": "I", "target": "H", "kind": "spontaneous", "params": "hospitalization_rate"},
+        {"source": "I", "target": "R", "kind": "spontaneous", "params": "recovery_rate"},
+        {"source": "H", "target": "R", "kind": "spontaneous", "params": "recovery_rate_h"}
+      ]
+    },
+    "population": {"name": "United_States"},
+    "simulation": {
+      "start_date": "2024-01-01",
+      "end_date": "2024-03-01",
+      "Nsim": 10
+    },
+    "initial_conditions": {
+      "method": "percentage",
+      "initial_percentages": {"I": 0.1}
+    }
+  }'`}
+</CurlBlock>
+
+### Transitions breakdown
+
+| Source | Target | Kind | Parameter |
+|---|---|---|---|
+| S | E | mediated | `transmission_rate`, mediated by I |
+| E | I | spontaneous | `incubation_rate` |
+| I | H | spontaneous | `hospitalization_rate` |
+| I | R | spontaneous | `recovery_rate` |
+| H | R | spontaneous | `recovery_rate_h` |

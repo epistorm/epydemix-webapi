@@ -1,0 +1,108 @@
+---
+sidebar_position: 4
+---
+
+import EndpointSelector from '@site/src/components/EndpointSelector';
+import CurlBlock from '@site/src/components/CurlBlock';
+
+# Initial Conditions
+
+<EndpointSelector />
+
+The `initial_conditions` block seeds the model's compartments at the start of the simulation. Two methods are supported: `percentage` (default) and `absolute`. If you omit the block entirely, [epydemix's built-in default](#default-when-omitted) is used.
+
+## `percentage`
+
+Specify the share of the population in each compartment as a **percentage** (not a fraction). The values are divided by 100 internally, distributed proportionally across age groups, and whatever is left over goes to the first compartment of the preset (usually `Susceptible`).
+
+| Field | Type | Notes |
+|---|---|---|
+| `method` | `"percentage"` | Default. |
+| `initial_percentages` | `{compartment: number}` | Percentages of total population. `0.1` = 0.1%, `10.0` = 10%. Each value must be between 0 and 100, and the values must sum to at most 100. |
+
+### Example: seed 0.1% as infected
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "SIR",
+      "parameters": {"R0": 2.5, "infectious_period": 10.0}
+    },
+    "population": {"name": "United_States"},
+    "simulation": {"start_date": "2024-01-01", "end_date": "2024-04-01", "Nsim": 10},
+    "initial_conditions": {
+      "method": "percentage",
+      "initial_percentages": {"Infected": 0.1}
+    }
+  }'`}
+</CurlBlock>
+
+### Example: seed multiple compartments
+
+The remainder (after `Infected` and `Recovered`) lands in `Susceptible`. Here 1% infected, 30% already recovered (e.g. modeling a population with prior immunity), and 69% susceptible.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "SIR",
+      "parameters": {"R0": 2.5, "infectious_period": 10.0}
+    },
+    "population": {"name": "United_States"},
+    "simulation": {"start_date": "2024-01-01", "end_date": "2024-04-01", "Nsim": 10},
+    "initial_conditions": {
+      "method": "percentage",
+      "initial_percentages": {"Infected": 1.0, "Recovered": 30.0}
+    }
+  }'`}
+</CurlBlock>
+
+The percentage of each compartment is split across age groups in proportion to each group's share of the total population, so larger age groups receive proportionally more seed counts.
+
+## `absolute`
+
+Specify exact counts per compartment per age group. You are responsible for making the counts sum to the population in each age group; nothing is auto-filled.
+
+| Field | Type | Notes |
+|---|---|---|
+| `method` | `"absolute"` | |
+| `compartments` | `{compartment: number[]}` | One array per compartment, with at least one compartment. Array length must equal the population's number of age groups. Counts must be finite and non-negative. |
+
+### Example: explicit per-age counts
+
+The five-bin default for `United_States` has age groups `[0-19, 20-49, 50-64, 65-74, 75+]`. The arrays below seed 100 / 200 / 500 / 500 / 200 infected per age group; the rest of each group sits in `Susceptible`.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "SIR",
+      "parameters": {"R0": 2.5, "infectious_period": 10.0}
+    },
+    "population": {"name": "United_States"},
+    "simulation": {"start_date": "2024-01-01", "end_date": "2024-04-01", "Nsim": 10},
+    "initial_conditions": {
+      "method": "absolute",
+      "compartments": {
+        "Susceptible": [83000000, 132000000, 62000000, 32000000, 22000000],
+        "Infected":    [100, 200, 500, 500, 200]
+      }
+    }
+  }'`}
+</CurlBlock>
+
+If the array length doesn't match the population's age groups, the request is rejected with a `422`. A single-element array is not repeated across age groups.
+
+## Default when omitted
+
+If you omit `initial_conditions`, ~0.05% of each age group is seeded into `Infected` and the rest into `Susceptible`. For the vaccination presets, the seed is split evenly between `Exposed` and `Infected` (~0.025% each) and the `_vax` branch starts at zero.
+
+## Notes
+
+- Compartment names in `initial_percentages` / `compartments` must match the preset's compartment names (e.g. `Susceptible`, `Exposed`, `Infected`, `Recovered`, `Hospitalized` for SEIHR-family presets; `_vax` twins for the vaccination presets). An unknown name is rejected with a `422` that lists the model's compartments.
+- For the vaccination presets, the vaccinated branch (`Susceptible_vax`, `Exposed_vax`, …) starts at zero unless you seed it or supply a [`vaccination`](./vaccination/overview.mdx) block.
+- Use [Custom Models](./model/custom-models.mdx) if you need compartments outside the preset list.

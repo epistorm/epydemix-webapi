@@ -1,0 +1,83 @@
+---
+title: v0.6.0
+date: 2026-05-13
+summary: |
+  - Calculated parameters: arithmetic expressions in `model.parameters`
+  - Reserved name `CONTACT_MATRIX_EIGENVALUE_ALL` for $R_0$ calibration
+  - Population metadata regenerated to match upstream subnational naming
+---
+
+import ReleaseHeader from '@site/src/components/ReleaseHeader';
+
+# v0.6.0
+
+<ReleaseHeader />
+
+## Overview
+- Add **calculated parameters** to `model.parameters`: a string value is treated as an arithmetic expression over other parameters and evaluated at simulation build time
+- Expose the largest eigenvalue of the contact matrix as a reserved parameter **`CONTACT_MATRIX_EIGENVALUE_ALL`** usable in calculated-parameter expressions
+- Regenerate population metadata to match the current upstream subnational naming (single-underscore → double-underscore)
+
+## Simulations
+
+`POST /api/v1/simulations`
+
+### Calculated parameters
+
+Values in `model.parameters` can now be expressions over the other parameters. Useful for branching outflow rates and for deriving one parameter from another:
+
+```json
+{
+  "parameters": {
+    "p_h": 0.05,
+    "gamma": 0.1,
+    "alpha": 0.2,
+    "recovery_rate": "(1 - p_h) * gamma",
+    "hospitalization_rate": "p_h * alpha"
+  }
+}
+```
+
+Source-parameter shapes propagate via numpy broadcasting, so an age-varying or seasonally-scaled source flows through the expression automatically. Calculated parameters evaluate **after** `parameter_transforms`.
+
+Expressions can only include strict arithmetic syntax: `+`, `-`, `*`, `/`, `//`, `**`, `%`, unary `+`/`-`, parentheses, numeric literals, and parameter names. No function calls, attribute access, subscripts, comparisons, or conditionals. Circular references and undefined names raise `422` with the offending name.
+
+A calculated parameter cannot be the `target_parameter` of a `parameter_transform`. Apply the transform to a source parameter instead and let it propagate through the expression.
+
+See the [Parameters guide](/docs/guides/model/parameters/overview#calculated-parameters) for the full description and examples.
+
+### Reserved name: `CONTACT_MATRIX_EIGENVALUE_ALL`
+
+The largest eigenvalue of the summed contact matrix (across all layers) is available as `CONTACT_MATRIX_EIGENVALUE_ALL`. The most common use is calibrating `transmission_rate` from a target $R_0$:
+
+```json
+{
+  "parameters": {
+    "R0": 1.5,
+    "gamma": 0.1,
+    "recovery_rate": "gamma",
+    "transmission_rate": "R0 * gamma / CONTACT_MATRIX_EIGENVALUE_ALL"
+  }
+}
+```
+
+User parameter names cannot collide with reserved names. Reserved values are injected only into the expression namespace; they do not appear in `results.parameters`.
+
+## Populations
+
+`GET /api/v1/populations`
+
+### Population name identifier update
+
+A recent [`epydemix-data` v1.2.0](https://github.com/epistorm/epydemix-data/releases/tag/v1.2.0) update switched subnational identifiers from a single-underscore to a double-underscore separator (e.g. `United_States__Massachusetts` rather than `United_States_Massachusetts`). The precomputed population metadata CSVs (`app/data/population_metadata.csv` and `app/data/population_age_distribution.csv`) have been regenerated against the current release to match.
+
+### United States county-level populations
+
+The same `epydemix-data` v1.2.0 update introduces ~3,100 US county-level populations (e.g. `United_States__Massachusetts__Suffolk_County`). Demographic distributions come from the US Census Bureau (2023); contact matrices are inherited from the corresponding state in the absence of county-specific survey data. See the [Population Presets page](/docs/guides/populations/presets#united-states-county-level) for examples.
+
+## Documentation
+
+- New **Calculated parameters** section in the Parameters guide: expression syntax, broadcasting/composition with transforms, reserved names, and an R0-calibration example
+- Note in the **Parameter Transforms** guide that `target_parameter` must be a source parameter (scalar or age-varying), not a calculated one
+- The **Populations Overview** R0-calibration section now points at `CONTACT_MATRIX_EIGENVALUE_ALL` as the in-request shortcut
+- The **Population Presets** page reflects the new double-underscore convention across all subnational identifiers, and adds a section on US county-level populations (~3,100 counties) with examples

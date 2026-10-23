@@ -1,0 +1,252 @@
+---
+sidebar_position: 2
+---
+
+import EndpointSelector from '@site/src/components/EndpointSelector';
+import CurlBlock from '@site/src/components/CurlBlock';
+
+# Campaigns
+
+<EndpointSelector />
+
+This page covers the per-campaign fields and rollout strategies inside the `vaccination` block. For the surrounding block structure and `flows` configuration, see the [Overview](./overview.mdx).
+
+## Quick start
+
+The fastest path is using one of the vaccination model presets with a flat-count vaccination campaign (the example below uses V-SEIHR). In the following example, we roll out vaccination starting in February 2025 with a target of 100,000 doses per day held constant across the window. See [Dose allocation](./overview.mdx#dose-allocation) for how the daily dose count splits across age groups.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "V-SEIHR",
+      "parameters": {
+        "R0": 2.5,
+        "incubation_period": 3.0,
+        "infectious_period": 2.5,
+        "hosp_duration": 5.0,
+        "hosp_proportion": 0.05,
+        "VE_S": 0.7,
+        "VE_H": 0.85
+      }
+    },
+    "population": {"name": "United_States"},
+    "simulation": {"start_date": "2025-01-01", "end_date": "2025-06-30", "Nsim": 10},
+    "vaccination": {
+      "campaigns": [
+        {
+          "start_date": "2025-02-01",
+          "end_date": "2025-04-30",
+          "rollout": {"type": "flat_count", "daily_doses": 100000}
+        }
+      ]
+    }
+  }'`}
+</CurlBlock>
+
+The response includes the resulting `Susceptible_to_Susceptible_vax` transition series; see [Inspecting the rollout](./overview.mdx#inspecting-the-rollout) for what to look at.
+
+## Campaign fields
+
+Each entry in `campaigns` describes one rollout:
+
+| Field | Required | Description |
+|---|---|---|
+| `name` | no | Free-text label echoed back in `metadata.vaccination`. Handy for keeping multiple overlapping campaigns straight. |
+| `start_date` | yes | Campaign start (`YYYY-MM-DD`), inclusive. |
+| `end_date` | yes | Campaign end (`YYYY-MM-DD`), inclusive. Must be `≥ start_date`. |
+| `rollout` | yes | Rollout strategy. Supported: `flat_count`, `fixed_rate`. The `type` field is the discriminator. See [Rollout strategies](#rollout-strategies). |
+| `target_age_groups` | no | List of age-group labels (e.g. `["50-64", "65+"]`). Must be unique and must match labels from the resolved population. `null` (the default) means all groups. Empty lists are rejected. |
+| `coverage` | no | Optional cap that stops the campaign once vaccinated compartments in `target_age_groups` reach a target fraction of the initial population. See [Coverage cap](#coverage-cap). |
+
+## Rollout strategies
+
+### Flat rollout (count)
+
+A constant `daily_doses` count is scheduled every day across the campaign window, distributed proportionally to the source-compartment population in each targeted age group.
+
+"Flat" refers to the *scheduled* budget, not the *delivered* curve: as the source pool depletes (through vaccination, infections, etc.), the actual daily delivered count can drift below `daily_doses`. If the live pool drops below `daily_doses` per step, the per-source stochastic draw saturates against the available population; if the pool is empty, no doses are delivered that step. See the [Dose allocation](./overview.mdx#dose-allocation) section for the per-step competing-risks draw.
+
+| Field | Required | Description |
+|---|---|---|
+| `type` | yes | Literal `"flat_count"`. The discriminator. |
+| `daily_doses` | yes | Target doses delivered per day. Must be `> 0`. |
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {"preset": "V-SEIR", "parameters": {"R0": 2.5, "VE_S": 0.7}},
+    "population": {"name": "United_States"},
+    "simulation": {"start_date": "2025-01-01", "end_date": "2025-06-30", "Nsim": 10},
+    "vaccination": {
+      "campaigns": [
+        {
+          "start_date": "2025-02-01",
+          "end_date": "2025-04-30",
+          "rollout": {"type": "flat_count", "daily_doses": 100000}
+        }
+      ]
+    }
+  }'`}
+</CurlBlock>
+
+<details className="quiet">
+<summary>Example</summary>
+
+Here is an example of V-SEIR model run on a 1,000,000 homogeneous population ($R_0 = 1.4$, $\mathrm{VE}_S = 0.85$, 0.02% initial infections, no waning), with a single campaign scheduled at 5,000 doses/day from Feb 1 to Oct 15, 2025 (100 stochastic runs, median plotted).
+
+![Flat-count rollout: scheduled vs delivered, plus the susceptible pool depleting through the campaign window](/img/vaccination/flat-count-depletion.svg)
+
+The scheduled budget (dashed) holds at 5,000/day across the entire window, but the delivered count drops to zero around the end of May as $S$ is exhausted by the epidemic plus vaccination.
+
+</details>
+
+### Fixed rate (per-day hazard)
+
+A constant per-day hazard rate, tansitioning from source compartment to the target inside the window. This is identical to a 'spontaneous transition' at `rate` (restricted to `target_age_groups` and the campaign window). Every individual in a source compartment has a per-day probability of `1 - exp(-rate * dt)` of moving to the target.
+
+Use this when you want to express vaccination as a rate rather than a daily count. Unlike `flat_count`, the per-day flow scales with the current source pool, so the analytic decay $S(t) = S_0 \, e^{-r t}$ holds in the absence of competing transitions.
+
+| Field | Required | Description |
+|---|---|---|
+| `type` | yes | Literal `"fixed_rate"`. The discriminator. |
+| `rate` | yes | Per-day hazard rate. Must be `> 0`. |
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {"preset": "V-SEIHR", "parameters": {"R0": 2.5, "VE_S": 0.7, "VE_H": 0.85}},
+    "population": {"name": "United_States"},
+    "simulation": {"start_date": "2025-01-01", "end_date": "2025-06-30", "Nsim": 10},
+    "vaccination": {
+      "campaigns": [
+        {
+          "start_date": "2025-02-01",
+          "end_date": "2025-04-30",
+          "rollout": {"type": "fixed_rate", "rate": 0.005}
+        }
+      ]
+    }
+  }'`}
+</CurlBlock>
+
+<details className="quiet">
+<summary>Example</summary>
+
+Same V-SEIR setup as the flat-count example (1,000,000 homogeneous population, $R_0 = 1.4$, $\mathrm{VE}_S = 0.85$, 0.02% initial infections, no waning) but driven by a `fixed_rate` campaign at `rate=0.005`/day from Feb 1 to Oct 15, 2025 (100 stochastic runs, median plotted). The rate is chosen so the initial per-day delivery ($\mathrm{rate} \cdot S_0 = 5{,}000$) matches the flat-count budget, making the two plots directly comparable.
+
+![Fixed-rate rollout: constant hazard rate, the delivered per-day count tapering as the susceptible pool shrinks, and the susceptible compartment over time](/img/vaccination/fixed-rate-depletion.svg)
+
+As seen in the top figure, the hazard rate (top) is the constant during the campaign period. Every individual in the source has the same per-day probability of being vaccinated throughout the window. The delivered per-day count (middle) is therefore $\mathrm{rate} \cdot S(t)$, declining smoothly as $S$ (bottom) shrinks rather than holding flat.
+
+</details>
+
+## Coverage cap
+
+Both rollout strategies are time-based: they keep delivering at their configured pace until `end_date`, regardless of how much of the population has already been vaccinated. The optional `coverage` block on each campaign adds a stop condition.
+
+```json
+"coverage": {
+  "fraction": 0.7,
+  "compartments": ["S_vax", "E_vax", "I_vax", "R_vax"]
+}
+```
+
+Once the summed current occupancy of `compartments`, restricted to the campaign's `target_age_groups`, reaches `fraction * initial_population_in_target_age_groups`, the campaign stops contributing to the rate. `initial_population_in_target_age_groups` is summed at the campaign's `start_date` across **all** compartments in those age groups (the public-health convention).
+
+| Field | Required | Description |
+|---|---|---|
+| `fraction` | yes | Cap as a fraction of initial population in `target_age_groups`. Must satisfy `0 < fraction ≤ 1`. |
+| `compartments` | yes | List of compartments whose current occupancy is summed against the threshold. Must reference compartments declared in `model.compartments`, and cannot include any compartment that also appears as a `source` in the campaign's flows (otherwise the cap fires before any doses are delivered). |
+
+Note the following:
+
+- **Current occupancy, not cumulative ever-vaccinated.** The cap reads the live state of `compartments`. If individuals can leave the vaccinated branch (waning back to `S`, death), the cap will under-count. List every downstream vaccinated compartment, including absorbing states like `D_vax` if your model has them, to match the intuitive notion of coverage.
+- **Approximate threshold.** The cap is evaluated at the start of each step, before the multinomial draw. Therefore, the campaign plateaus at approximately `threshold`, with up to one step's worth of doses of overshoot.
+
+## Custom-model usage
+
+You can define a custom model that incorporates the effects of vaccination and takes advantage of the `vaccination` block. What you need is a model whose compartments include both a source and a vaccinated target, and (typically) a vaccinated layer that mirrors the unvaccinated transitions with vaccine-efficacy-attenuated rates. The block then drives doses across the `source → target` pairs declared in `flows`. You can model the effects of vaccination through transformed parameters (e.g. severity reduction) and additional transitions.
+
+On a custom model the `flows` field is **required**; there is no default. Every `source` and (non-null) `target` must reference a compartment declared in `model.compartments`.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "compartments": ["S", "V", "I", "R"],
+      "parameters": {
+        "transmission_rate": 0.3,
+        "transmission_rate_v": "(1 - VE_S) * transmission_rate",
+        "VE_S": 0.7,
+        "recovery_rate": 0.1
+      },
+      "transitions": [
+        {"source": "S", "target": "I", "kind": "mediated", "params": ["transmission_rate", "I"]},
+        {"source": "V", "target": "I", "kind": "mediated", "params": ["transmission_rate_v", "I"]},
+        {"source": "I", "target": "R", "kind": "spontaneous", "params": ["recovery_rate"]}
+      ]
+    },
+    "population": {"name": "Italy"},
+    "simulation": {"start_date": "2025-01-01", "end_date": "2025-06-30", "Nsim": 10},
+    "vaccination": {
+      "flows": [{"source": "S", "target": "V"}],
+      "campaigns": [
+        {
+          "start_date": "2025-02-01",
+          "end_date": "2025-03-31",
+          "rollout": {"type": "flat_count", "daily_doses": 50000}
+        }
+      ]
+    }
+  }'`}
+</CurlBlock>
+
+
+## Multiple campaigns
+
+Listing more than one campaign lets you stack rollouts. Two overlapping `flat_count` campaigns add their daily doses at every step. Use this for booster waves, prioritization changes (e.g. open eligibility on a given date by adding a younger-age campaign mid-rollout), or to compare a baseline campaign against an accelerated counterfactual.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "V-SEIHR",
+      "parameters": {"R0": 2.5, "VE_S": 0.7, "VE_H": 0.85}
+    },
+    "population": {
+      "name": "United_States",
+      "contacts_source": "prem_2021",
+      "age_group_mapping": {
+        "0-17":  ["0-4", "5-9", "10-14", "15-19"],
+        "18-49": ["20-24", "25-29", "30-34", "35-39", "40-44", "45-49"],
+        "50-64": ["50-54", "55-59", "60-64"],
+        "65+":   ["65-69", "70-74", "75+"]
+      }
+    },
+    "simulation": {"start_date": "2025-01-01", "end_date": "2025-06-30", "Nsim": 10},
+    "vaccination": {
+      "campaigns": [
+        {
+          "name": "phase 1 (older adults)",
+          "start_date": "2025-02-01",
+          "end_date": "2025-03-31",
+          "target_age_groups": ["65+"],
+          "rollout": {"type": "flat_count", "daily_doses": 40000}
+        },
+        {
+          "name": "phase 2 (open eligibility)",
+          "start_date": "2025-03-15",
+          "end_date": "2025-05-31",
+          "target_age_groups": ["18-49", "50-64", "65+"],
+          "rollout": {"type": "flat_count", "daily_doses": 80000}
+        }
+      ]
+    }
+  }'`}
+</CurlBlock>

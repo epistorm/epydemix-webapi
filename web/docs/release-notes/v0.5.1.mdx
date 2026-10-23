@@ -1,0 +1,35 @@
+---
+title: v0.5.1
+date: 2026-05-04
+summary: |
+  - Detailed documentation on populations, including overview, presets, and customizations
+  - Dependency updates
+---
+
+import ReleaseHeader from '@site/src/components/ReleaseHeader';
+
+# v0.5.1
+
+<ReleaseHeader />
+
+## Overview
+- Detailed documentation on populations, including overview, presets, and customizations
+- Dependency updates
+
+## Documentation
+
+### Populations
+
+The populations guide is now a category with three pages: **Overview**, **Population Presets**, and **Custom Populations**. The overview covers age-stratified simulations, contact-matrix heterogeneity, and how to calibrate `transmission_rate` from a target $R_0$.
+
+### Running a Simulation
+
+Added cross-links to the new Populations and Model pages, plus a `jq` one-liner for extracting the median peak of `Infected`.
+
+## Dependencies
+
+- gitpython 3.1.46 → 3.1.49
+- pillow 12.1.1 → 12.2.0
+- pygments 2.19.2 → 2.20.0
+- pytest 9.0.2 → 9.0.3
+- python-dotenv 1.2.1 → 1.2.2

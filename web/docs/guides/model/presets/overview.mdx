@@ -1,0 +1,30 @@
+---
+sidebar_position: 1
+---
+
+import EndpointSelector from '@site/src/components/EndpointSelector';
+import CurlBlock from '@site/src/components/CurlBlock';
+
+# Overview
+
+<EndpointSelector />
+
+## What are model presets?
+
+Model presets are built-in compartmental epidemic models that you can use without defining compartments or transitions yourself. Each preset comes with a set of compartments, default parameters, and transition rules.
+
+You can list all available presets:
+
+<CurlBlock>{`curl BASE_URL/models/presets`}</CurlBlock>
+
+## Available presets
+
+| Preset | Compartments | Use when |
+|---|---|---|
+| [SIR](./sir.mdx) | S, I, R | You want the simplest possible epidemic model with permanent immunity. |
+| [SEIR](./seir.mdx) | S, E, I, R | You need a latent (exposed-but-not-yet-infectious) period before infectiousness. |
+| [SIS](./sis.mdx) | S, I | Recovered individuals return to the susceptible pool with no lasting immunity (e.g. many bacterial infections). |
+| [V-SEIR](./v-seir.mdx) | 8 (S/E/I/R × unvaccinated/vaccinated) | You want SEIR with a vaccinated branch and a vaccination rollout via [the `vaccination` block](../../vaccination/overview.mdx), without an explicit hospitalization compartment. |
+| [V-SEIHR](./v-seihr.mdx) | 10 (S/E/I/H/R × unvaccinated/vaccinated) | You want SEIR with explicit hospitalization, a vaccinated branch, and a vaccination rollout via [the `vaccination` block](../../vaccination/overview.mdx). |
+
+If none of these fit, you can declare compartments and transitions yourself. See [Custom Models](../custom-models.mdx).

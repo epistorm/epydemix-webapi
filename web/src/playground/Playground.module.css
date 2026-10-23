@@ -1,0 +1,344 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--ifm-navbar-height));
+  min-height: 600px;
+}
+
+.tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+  background: var(--ifm-background-surface-color);
+}
+
+.tab {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.tabActive {
+  color: var(--ifm-color-primary);
+  border-bottom-color: var(--ifm-color-primary);
+  font-weight: 600;
+}
+
+.tabDisabled {
+  color: var(--ifm-color-emphasis-400);
+  cursor: not-allowed;
+}
+
+.split {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) 2fr;
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.left {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--ifm-color-emphasis-200);
+  min-height: 0;
+}
+
+.right {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  min-height: 52px;
+  box-sizing: border-box;
+  justify-content: center;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+  background: var(--ifm-background-surface-color);
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.row label {
+  font-size: 0.8rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.row select,
+.row input {
+  height: 30px;
+  padding: 0 0.5rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 4px;
+  background: var(--ifm-background-color);
+  color: var(--ifm-font-color-base);
+  font-size: 0.85rem;
+  box-sizing: border-box;
+}
+
+.editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.runBtn {
+  height: 30px;
+  background: var(--ifm-color-primary);
+  color: white;
+  border: none;
+  padding: 0 0.9rem;
+  border-radius: 4px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.runBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.secondaryBtn {
+  height: 30px;
+  background: transparent;
+  color: var(--ifm-color-emphasis-700);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  padding: 0 0.7rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  box-sizing: border-box;
+}
+
+.chartWrap {
+  flex: 1;
+  min-height: 280px;
+  padding: 0.75rem 1rem;
+}
+
+.responseWrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0.5rem 1rem 0;
+}
+
+.responseHeader {
+  font-size: 0.85rem;
+  color: var(--ifm-color-emphasis-700);
+}
+
+.responseBox {
+  position: relative;
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.responsePre {
+  flex: 1;
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  background: var(--ifm-color-emphasis-100);
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 4px;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  overflow: auto;
+}
+
+.jsonViewContainer {
+  background: transparent;
+  line-height: 1.2;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.responseActions {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  display: flex;
+  gap: 0.25rem;
+  z-index: 1;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: var(--ifm-background-surface-color);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 4px;
+  color: var(--ifm-color-emphasis-700);
+  cursor: pointer;
+}
+
+.iconBtn:hover {
+  background: var(--ifm-color-emphasis-200);
+  color: var(--ifm-color-emphasis-900);
+}
+
+.viewToggle {
+  display: inline-flex;
+  height: 30px;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-left: auto;
+  box-sizing: border-box;
+}
+
+.viewToggleBtn {
+  background: transparent;
+  border: none;
+  padding: 0 0.7rem;
+  font-size: 0.8rem;
+  color: var(--ifm-color-emphasis-700);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.viewToggleBtn + .viewToggleBtn {
+  border-left: 1px solid var(--ifm-color-emphasis-300);
+}
+
+.viewToggleBtn:hover {
+  background: var(--ifm-color-emphasis-100);
+}
+
+.viewToggleBtnActive {
+  background: var(--ifm-color-emphasis-200);
+  color: var(--ifm-color-emphasis-900);
+}
+
+.viewToggleBtnActive:hover {
+  background: var(--ifm-color-emphasis-200);
+}
+
+.legend {
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+  padding: 0.5rem 1rem;
+  max-height: 30%;
+  overflow-y: auto;
+}
+
+.legendRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.legendRow:hover {
+  background: var(--ifm-color-emphasis-100);
+}
+
+.legendRowSelected {
+  background: var(--ifm-color-emphasis-200);
+}
+
+.swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.legendLabel {
+  flex: 1;
+}
+
+.legendAction {
+  background: transparent;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 3px;
+  color: var(--ifm-color-emphasis-700);
+  cursor: pointer;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.7rem;
+  line-height: 1.3;
+  font-family: var(--ifm-font-family-monospace);
+}
+
+.legendAction:hover {
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-primary);
+}
+
+.legendRemove {
+  background: transparent;
+  border: none;
+  color: var(--ifm-color-emphasis-600);
+  cursor: pointer;
+  padding: 0 0.25rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.legendRemove:hover {
+  color: var(--ifm-color-danger);
+}
+
+.note {
+  margin: 0.25rem 0 0;
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+  background: var(--ifm-color-warning-contrast-background);
+  color: var(--ifm-color-warning-contrast-foreground);
+  font-size: 0.8rem;
+}
+
+.error {
+  margin: 0.25rem 1rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  background: var(--ifm-color-danger-contrast-background);
+  color: var(--ifm-color-danger-contrast-foreground);
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.empty {
+  color: var(--ifm-color-emphasis-500);
+  text-align: center;
+  padding: 2rem 1rem;
+}

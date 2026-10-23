@@ -21,11 +21,11 @@ The API exposes epydemix's simulation engine over HTTP. You can run compartmenta
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | [`/api/v1/simulations`](/api-reference#tag/simulations/POST/api/v1/simulations) | Run a simulation |
-| GET | [`/api/v1/populations`](/api-reference#tag/populations/GET/api/v1/populations) | List available populations |
-| GET | [`/api/v1/populations/{name}`](/api-reference#tag/populations/GET/api/v1/populations/{name}) | Get population details |
-| GET | [`/api/v1/populations/{name}/contacts`](/api-reference#tag/populations/GET/api/v1/populations/{name}/contacts) | Get contact matrices |
-| GET | [`/api/v1/models/presets`](/api-reference#tag/model-presets/GET/api/v1/models/presets) | List model presets |
-| GET | [`/api/v1/health`](/api-reference#tag/health/GET/api/v1/health) | Health check |
+| POST | [`/api/v1/simulations`](/api-reference) | Run a simulation |
+| GET | [`/api/v1/populations`](/api-reference) | List available populations |
+| GET | [`/api/v1/populations/{name}`](/api-reference) | Get population details |
+| GET | [`/api/v1/populations/{name}/contacts`](/api-reference) | Get contact matrices |
+| GET | [`/api/v1/models/presets`](/api-reference) | List model presets |
+| GET | [`/api/v1/health`](/api-reference) | Health check |
 
 The [API Reference](/api-reference) has interactive docs where you can explore schemas and send requests directly.
