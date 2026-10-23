@@ -3,7 +3,24 @@
 This module defines shared response schemas used by multiple endpoints.
 """
 
-from pydantic import BaseModel, Field
+from datetime import date
+from typing import Annotated
+
+from pydantic import AfterValidator, BaseModel, Field
+
+
+def _check_date(value: str) -> str:
+    """Accept only real calendar dates written as ``YYYY-MM-DD``."""
+    try:
+        valid = date.fromisoformat(value).isoformat() == value
+    except ValueError:
+        valid = False
+    if not valid:
+        raise ValueError(f"'{value}' is not a valid date in YYYY-MM-DD format")
+    return value
+
+
+DateStr = Annotated[str, AfterValidator(_check_date)]
 
 
 class ErrorResponse(BaseModel):

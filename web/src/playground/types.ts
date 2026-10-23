@@ -12,12 +12,19 @@ export type SimulationResults = {
   trajectories?: unknown;
 };
 
+export type SimulationWarning = {
+  code: 'parameter_overridden';
+  parameter: string;
+  overridden_by: string;
+  message: string;
+};
+
 export type SimulationResponse = {
   simulation_id: string;
-  status: 'completed' | 'failed';
+  status: 'completed';
   metadata?: unknown;
-  results?: SimulationResults | null;
-  error?: string | null;
+  results: SimulationResults;
+  warnings?: SimulationWarning[];
 };
 
 export type ShowKind = 'compartment' | 'transition' | 'parameter';

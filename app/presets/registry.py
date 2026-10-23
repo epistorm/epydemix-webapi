@@ -44,6 +44,8 @@ class PresetDefinition:
       - ``parameter_conversions``: derived-name → ``ParameterConversion`` for
         the period→rate / R0→β substitutions this preset accepts (see
         ``app.utils.parameter_conversions``). Empty = preset opts out.
+      - ``probability_parameters``: names that are probabilities or proportions
+        and must stay in ``[0, 1]`` after evaluation and transforms.
       - ``build_model``: callable. Receives a dict of user-supplied scalar
         parameters (preset defaults are merged inside). Returns
         ``(EpiModel, dict[str, str])`` where the second element is any
@@ -58,6 +60,7 @@ class PresetDefinition:
     parameter_conversions: dict[str, ParameterConversion]
     build_model: Callable[[dict[str, float]], tuple[EpiModel, dict[str, str]]]
     default_initial_conditions: Callable[[EpiModel], dict[str, np.ndarray]] | None = None
+    probability_parameters: tuple[str, ...] = ()
 
 
 PRESETS: dict[str, PresetDefinition] = {
@@ -97,6 +100,7 @@ PRESETS: dict[str, PresetDefinition] = {
         parameter_conversions=dict(v_seir.PARAMETER_CONVERSIONS),
         build_model=v_seir.build_v_seir_model,
         default_initial_conditions=v_seir.default_initial_conditions,
+        probability_parameters=("VE_S",),
     ),
     "V-SEIHR": PresetDefinition(
         name="V-SEIHR",
@@ -107,6 +111,7 @@ PRESETS: dict[str, PresetDefinition] = {
         parameter_conversions=dict(v_seihr.PARAMETER_CONVERSIONS),
         build_model=v_seihr.build_v_seihr_model,
         default_initial_conditions=v_seihr.default_initial_conditions,
+        probability_parameters=("VE_S", "VE_H", "hosp_proportion"),
     ),
 }
 

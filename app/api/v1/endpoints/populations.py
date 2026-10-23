@@ -4,16 +4,24 @@ This module provides endpoints for listing populations, retrieving
 population details, and accessing contact matrices.
 """
 
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, Body, HTTPException, Path, Query
 
 from ....services import population_service
 from ....services.population_service import PopulationLoadTimeoutError
+from ....services.python_export import (
+    render_contacts_python,
+    render_custom_population_python,
+    render_population_list_python,
+    render_population_python,
+)
+from ...responses import PythonSourceResponse, python_source_response
 from ..schemas.common import CacheInfoResponse
 from ..schemas.population import (
     ContactMatrixResponse,
     PopulationDetail,
     PopulationListResponse,
 )
+from ..schemas.simulation import CustomPopulationConfig
 
 router = APIRouter()
 
@@ -152,6 +160,37 @@ async def get_populations() -> PopulationListResponse:
 
 
 @router.get(
+    "/export/python",
+    response_class=PythonSourceResponse,
+    summary="Export population listing as Python",
+    operation_id="export_population_list_python",
+)
+async def export_population_list_python(
+    attribute: str = Query(default="age"),
+    level: int | None = Query(default=None),
+) -> PythonSourceResponse:
+    """Export Python that lists available epydemix populations."""
+    return python_source_response(
+        render_population_list_python(attribute, level), "list_populations.py"
+    )
+
+
+@router.post(
+    "/export/python",
+    response_class=PythonSourceResponse,
+    summary="Export a custom population as Python",
+    operation_id="export_custom_population_python",
+)
+async def export_custom_population_python(
+    config: CustomPopulationConfig = Body(...),
+) -> PythonSourceResponse:
+    """Export Python that constructs an inline custom population."""
+    return python_source_response(
+        render_custom_population_python(config), "custom_population.py"
+    )
+
+
+@router.get(
     "/cache",
     response_model=CacheInfoResponse,
     summary="Get population cache status",
@@ -171,6 +210,39 @@ async def get_cache_status() -> CacheInfoResponse:
     """
     info = population_service.get_cache_info()
     return CacheInfoResponse(**info)
+
+
+@router.get(
+    "/{name}/export/python",
+    response_class=PythonSourceResponse,
+    summary="Export population loading as Python",
+    operation_id="export_population_python",
+)
+async def export_population_python(
+    name: str,
+    contacts_source: str | None = Query(default=None),
+) -> PythonSourceResponse:
+    """Export Python that loads and inspects one population."""
+    return python_source_response(
+        render_population_python(name, contacts_source), f"{name}_population.py"
+    )
+
+
+@router.get(
+    "/{name}/contacts/export/python",
+    response_class=PythonSourceResponse,
+    summary="Export contact-matrix loading as Python",
+    operation_id="export_population_contacts_python",
+)
+async def export_population_contacts_python(
+    name: str,
+    contacts_source: str | None = Query(default=None),
+    layers: list[str] | None = Query(default=None),
+) -> PythonSourceResponse:
+    """Export Python that loads and inspects contact matrices."""
+    return python_source_response(
+        render_contacts_python(name, contacts_source, layers), f"{name}_contacts.py"
+    )
 
 
 @router.get(

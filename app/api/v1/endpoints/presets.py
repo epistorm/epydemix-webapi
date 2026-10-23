@@ -5,9 +5,11 @@ registry in ``app.presets.registry`` so adding a preset doesn't require edits
 here.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from ....presets import PRESETS
+from ....services.python_export import render_preset_python
+from ...responses import PythonSourceResponse, python_source_response
 from ..schemas.population import PresetInfo, PresetsListResponse
 
 router = APIRouter()
@@ -39,3 +41,16 @@ async def get_presets() -> PresetsListResponse:
     return PresetsListResponse(
         presets=[_preset_info(d) for d in PRESETS.values()],
     )
+
+
+@router.get(
+    "/{name}/export/python",
+    response_class=PythonSourceResponse,
+    summary="Export a model preset as Python",
+    operation_id="export_model_preset_python",
+)
+async def export_preset_python(name: str) -> PythonSourceResponse:
+    """Export an API preset as explicit epydemix model commands."""
+    if name not in PRESETS:
+        raise HTTPException(status_code=404, detail=f"Unknown model preset: {name}")
+    return python_source_response(render_preset_python(name), f"{name.lower()}_model.py")

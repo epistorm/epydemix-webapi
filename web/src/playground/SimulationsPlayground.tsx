@@ -116,10 +116,6 @@ export default function SimulationsPlayground() {
     setIsRunning(true);
     try {
       const response = await runSimulation(apiBase, body);
-      if (response.status !== 'completed') {
-        setError(response.error ?? `Simulation status: ${response.status}`);
-        return;
-      }
       const nextIndex = runs.reduce((m, r) => Math.max(m, r.index), 0) + 1;
       const usedColors = new Set(runs.map((r) => r.color));
       const color =

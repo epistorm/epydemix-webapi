@@ -321,6 +321,31 @@ class SimulationMetadata(BaseModel):
     )
 
 
+class SimulationWarning(BaseModel):
+    """Non-fatal notice about how the request was interpreted. Never changes the results."""
+
+    code: Literal["parameter_overridden"] = Field(
+        ...,
+        description=(
+            "Machine-readable warning code. `parameter_overridden`: a preset conversion "
+            "source (e.g. `infectious_period`, `R0`) was ignored because the rate it "
+            "converts to was explicitly provided."
+        ),
+        examples=["parameter_overridden"],
+    )
+    parameter: str = Field(
+        ..., description="Parameter that was ignored.", examples=["infectious_period"]
+    )
+    overridden_by: str = Field(
+        ..., description="Parameter that took precedence.", examples=["recovery_rate"]
+    )
+    message: str = Field(
+        ...,
+        description="Human-readable explanation. Use `code` for programmatic checks.",
+        examples=["infectious_period was ignored because recovery_rate was explicitly provided."],
+    )
+
+
 class SimulationResponse(BaseModel):
     """Complete simulation response."""
 
@@ -329,15 +354,17 @@ class SimulationResponse(BaseModel):
         description="Unique identifier for this simulation run.",
         examples=["sim_c9617343b215"],
     )
-    status: Literal["completed", "failed"] = Field(
+    status: Literal["completed"] = Field(
         ...,
-        description="Whether the simulation completed successfully.",
+        description=(
+            "Always `completed`. Failed runs return an HTTP error instead: 422 for "
+            "invalid input, 504 for a population load timeout, 500 for an internal error."
+        ),
         examples=["completed"],
     )
     metadata: SimulationMetadata = Field(..., description="Metadata about the simulation run.")
-    results: SimulationResultsData | None = Field(
-        default=None, description="Simulation results. Null if status is `failed`."
-    )
-    error: str | None = Field(
-        default=None, description="Error message if status is `failed`.", examples=[None]
+    results: SimulationResultsData = Field(..., description="Simulation results.")
+    warnings: list[SimulationWarning] = Field(
+        default_factory=list,
+        description="Non-fatal warnings about the request. Empty when there are none.",
     )

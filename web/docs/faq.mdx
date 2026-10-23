@@ -116,11 +116,11 @@ For example, to set the recovery rate directly instead of the infectious period:
 }
 ```
 
-Pass *either* the period or the rate, not both. If both are sent the rate form wins and the period is dropped silently. Conversions are preset-scoped; see each preset's Parameters table for which conversions it accepts.
+Pass *either* the period or the rate, not both. If both are sent, the rate is used and the response includes a [`parameter_overridden` warning](./guides/warnings.mdx). Conversions are preset-scoped; see each preset's Parameters table for which conversions it accepts, and [Preset conversions and precedence](./guides/model/parameters/overview.mdx#preset-conversions-and-precedence) for details.
 
 ### How do I set the transmission rate directly instead of R0?
 
-`R0` and `transmission_rate` are parameters for transmission, and are associated with each other. By default, the preset takes `R0` and derives `transmission_rate` from it via a preset-specific formula, which depends on the next-generation matrix of the model's infectious compartments. You can also directly set `transmission_rate` to bypass the conversion.
+`R0` and `transmission_rate` are parameters for transmission, and are associated with each other. By default, the preset takes `R0` and derives `transmission_rate` from it via a preset-specific formula, which depends on the next-generation matrix of the model's infectious compartments. You can also directly set `transmission_rate` to bypass the conversion. Every preset defaults to `R0: 2.5`, so the default `transmission_rate` depends on the chosen population's contact matrix. An explicit `transmission_rate` is used as given, so R0 is no longer fixed at 2.5.
 
 ```json
 "parameters": {
@@ -128,7 +128,7 @@ Pass *either* the period or the rate, not both. If both are sent the rate form w
 }
 ```
 
-If both are sent, `transmission_rate` wins and `R0` is dropped silently. See each preset's Parameters table for the conversion formula it uses, and [Model › Parameters › Calculated parameters](./guides/model/parameters/overview.mdx#calculated-parameters) for the resolver machinery.
+If both are sent, `transmission_rate` is used and the response includes a [`parameter_overridden` warning](./guides/warnings.mdx). See each preset's Parameters table for the conversion formula it uses, and [Preset conversions and precedence](./guides/model/parameters/overview.mdx#preset-conversions-and-precedence) for details.
 
 ### How do I make a parameter age-varying?
 
