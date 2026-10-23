@@ -329,15 +329,13 @@ class SimulationResponse(BaseModel):
         description="Unique identifier for this simulation run.",
         examples=["sim_c9617343b215"],
     )
-    status: Literal["completed", "failed"] = Field(
+    status: Literal["completed"] = Field(
         ...,
-        description="Whether the simulation completed successfully.",
+        description=(
+            "Always `completed`. Failed runs return an HTTP error instead: 422 for "
+            "invalid input, 504 for a population load timeout, 500 for an internal error."
+        ),
         examples=["completed"],
     )
     metadata: SimulationMetadata = Field(..., description="Metadata about the simulation run.")
-    results: SimulationResultsData | None = Field(
-        default=None, description="Simulation results. Null if status is `failed`."
-    )
-    error: str | None = Field(
-        default=None, description="Error message if status is `failed`.", examples=[None]
-    )
+    results: SimulationResultsData = Field(..., description="Simulation results.")

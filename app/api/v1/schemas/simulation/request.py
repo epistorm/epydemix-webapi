@@ -1,10 +1,12 @@
 """Simulation request schemas: model, population, run, output, and the top-level request."""
 
+from datetime import date
 from typing import Annotated, Any, Literal, TypeAlias
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
-from .....presets import preset_names
+from .....presets import PRESETS, preset_names
+from ..common import DateStr
 from .transforms import ParameterTransformConfig
 
 # Preset literal sourced from the registry so adding a preset doesn't require
@@ -213,8 +215,8 @@ PopulationConfig: TypeAlias = Annotated[
 class SimulationConfig(BaseModel):
     """Simulation execution parameters."""
 
-    start_date: str = Field(..., description="Start date in `YYYY-MM-DD` format.")
-    end_date: str = Field(..., description="End date in `YYYY-MM-DD` format.")
+    start_date: DateStr = Field(..., description="Start date in `YYYY-MM-DD` format.")
+    end_date: DateStr = Field(..., description="End date in `YYYY-MM-DD` format.")
     Nsim: int = Field(default=10, ge=1, le=1000, description="Number of simulation runs.")
     dt: float = Field(default=1.0, gt=0, description="Time step in days.")
     seed: int | None = Field(default=None, description="Random seed for reproducibility.")
@@ -222,6 +224,25 @@ class SimulationConfig(BaseModel):
         default="D",
         description="Resampling frequency. `D` = daily, `W` = weekly, `M` = monthly.",
     )
+
+    @model_validator(mode="after")
+    def _validate_period(self) -> "SimulationConfig":
+        if self.end_date < self.start_date:
+            raise ValueError("'end_date' must be >= 'start_date'")
+        # epydemix infers the output frequency from the simulation dates and
+        # needs at least 3 of them. Sub-daily runs are padded by one day
+        # internally (see simulation_service._padded_internal_simulation).
+        days = (date.fromisoformat(self.end_date) - date.fromisoformat(self.start_date)).days
+        if self.dt < 1:
+            days += 1
+        steps = int(days / self.dt) + 1
+        if steps < 3:
+            raise ValueError(
+                f"Simulation from 'start_date' to 'end_date' with dt={self.dt} has "
+                f"{steps} time step(s), but epydemix needs at least 3. "
+                "Use a later 'end_date' or a smaller 'dt'."
+            )
+        return self
 
 
 class InitialConditionsConfig(BaseModel):
@@ -259,8 +280,8 @@ class InterventionConfig(BaseModel):
     """A contact reduction intervention applied to a specific layer during a time period."""
 
     layer_name: str = Field(..., description="Contact layer to modify, e.g. `school`, `work`.")
-    start_date: str = Field(..., description="Start date in `YYYY-MM-DD` format.")
-    end_date: str = Field(..., description="End date in `YYYY-MM-DD` format.")
+    start_date: DateStr = Field(..., description="Start date in `YYYY-MM-DD` format.")
+    end_date: DateStr = Field(..., description="End date in `YYYY-MM-DD` format.")
     reduction_factor: float = Field(
         ...,
         ge=0,
@@ -268,6 +289,12 @@ class InterventionConfig(BaseModel):
         description="Multiplier for contacts. `0.2` = reduce to 20% of normal.",
     )
     name: str | None = Field(default=None, description="Optional name for this intervention.")
+
+    @model_validator(mode="after")
+    def _validate_window(self) -> "InterventionConfig":
+        if self.end_date < self.start_date:
+            raise ValueError("'end_date' must be >= 'start_date'")
+        return self
 
 
 class SummaryConfig(BaseModel):
@@ -436,8 +463,8 @@ class VaccinationCampaignConfig(BaseModel):
         default=None,
         description="Optional label echoed back in metadata.",
     )
-    start_date: str = Field(..., description="Campaign start (`YYYY-MM-DD`), inclusive.")
-    end_date: str = Field(
+    start_date: DateStr = Field(..., description="Campaign start (`YYYY-MM-DD`), inclusive.")
+    end_date: DateStr = Field(
         ...,
         description="Campaign end (`YYYY-MM-DD`), inclusive. Must be `>= start_date`.",
     )
@@ -624,3 +651,23 @@ class SimulationRequest(BaseModel):
             if isinstance(pop, dict) and "source" not in pop:
                 data = {**data, "population": {**pop, "source": "builtin"}}
         return data
+
+    @model_validator(mode="after")
+    def _validate_initial_compartments(self) -> "SimulationRequest":
+        initial = self.initial_conditions
+        if initial is None:
+            return self
+        names = (
+            initial.compartments if initial.method == "absolute" else initial.initial_percentages
+        )
+        if self.model.preset:
+            compartments = PRESETS[self.model.preset].compartments
+        else:
+            compartments = self.model.compartments or []
+        unknown = sorted(set(names or {}) - set(compartments))
+        if unknown:
+            raise ValueError(
+                f"initial_conditions references unknown compartment(s) {unknown}. "
+                f"Model compartments are {list(compartments)}."
+            )
+        return self

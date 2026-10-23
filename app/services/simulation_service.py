@@ -163,188 +163,153 @@ def run_simulation(request: SimulationRequest) -> SimulationResponse:
     SimulationResponse
         Response containing simulation results with compartment and
         transition trajectories, metadata, and optional summary statistics.
-        If an error occurs, returns a failed status with error message.
+
+    Raises
+    ------
+    ValueError
+        If the configuration is invalid for the resolved model or population.
+    PopulationLoadTimeoutError
+        If loading a builtin population times out.
     """
     simulation_id = f"sim_{uuid.uuid4().hex[:12]}"
 
     internal_sim = _padded_internal_simulation(request.simulation)
 
-    try:
-        # Reject any user parameter name that collides with a reserved
-        # SCREAMING_SNAKE_CASE name (e.g. CONTACT_MATRIX_EIGENVALUE_ALL).
-        # These are computed from the model state and injected into the
-        # eval namespace by `apply_calculated_parameters`; allowing a
-        # user override would silently mask the model-derived value.
-        user_param_names = set((request.model.parameters or {}).keys())
-        reserved_collisions = user_param_names & RESERVED_NAMES
-        if reserved_collisions:
-            raise ValueError(
-                f"Parameter name(s) {sorted(reserved_collisions)} collide with "
-                f"reserved name(s) injected by the calculated-parameter evaluator. "
-                f"Reserved names are SCREAMING_SNAKE_CASE constants derived from "
-                f"the model state and cannot be overridden."
-            )
-
-        # Create model (scalar params applied; age-varying and expression
-        # params are deferred: the former until population is set, the latter
-        # until after transforms so source shapes propagate through).
-        model, list_params, expr_params = create_model(request.model)
-
-        # Setup population
-        setup_population(model, request.population)
-
-        # Add age-varying base parameters now that the population is resolved.
-        apply_age_varying_parameters(model, list_params)
-
-        # Inject preset-scoped parameter conversions (period→rate, R0→β).
-        # Custom models (no preset) opt out: pass {} so nothing is injected.
-        preset_def = PRESETS[request.model.preset] if request.model.preset else None
-        conversions = preset_def.parameter_conversions if preset_def else {}
-        user_scalar_names = {
-            k for k, v in (request.model.parameters or {}).items() if not isinstance(v, str)
-        }
-        converted = resolve_parameter_conversions(model.parameters, user_scalar_names, conversions)
-        # User calc-params still win over registry-injected conversions on collision.
-        expr_params = {**converted, **expr_params}
-
-        # Apply interventions
-        apply_interventions(model, request.interventions)
-
-        # Source-pass transforms first (balcan/scale/override on non-calc names).
-        # All downstream stages (transforms, vaccination, run, parameter extraction)
-        # use the padded `internal_sim`; the result is trimmed back to the user's
-        # original `end_date` before being returned.
-        calc_names = set(expr_params)
-        apply_parameter_transforms_sources(
-            model,
-            request.parameter_transforms,
-            internal_sim,
-            calculated_names=calc_names,
+    # Reject any user parameter name that collides with a reserved
+    # SCREAMING_SNAKE_CASE name (e.g. CONTACT_MATRIX_EIGENVALUE_ALL).
+    # These are computed from the model state and injected into the
+    # eval namespace by `apply_calculated_parameters`; allowing a
+    # user override would silently mask the model-derived value.
+    user_param_names = set((request.model.parameters or {}).keys())
+    reserved_collisions = user_param_names & RESERVED_NAMES
+    if reserved_collisions:
+        raise ValueError(
+            f"Parameter name(s) {sorted(reserved_collisions)} collide with "
+            f"reserved name(s) injected by the calculated-parameter evaluator. "
+            f"Reserved names are SCREAMING_SNAKE_CASE constants derived from "
+            f"the model state and cannot be overridden."
         )
 
-        # Evaluate calculated (expression) parameters now that all source
-        # values have their final shapes.
-        apply_calculated_parameters(model, expr_params)
+    # Create model (scalar params applied; age-varying and expression
+    # params are deferred: the former until population is set, the latter
+    # until after transforms so source shapes propagate through).
+    model, list_params, expr_params = create_model(request.model)
 
-        # Calc-pass transforms on top of evaluated calc-params.
-        apply_parameter_transforms_calc(
-            model,
-            request.parameter_transforms,
-            internal_sim,
-            calculated_names=calc_names,
-        )
+    # Setup population
+    setup_population(model, request.population)
 
-        # Create initial conditions first so coverage-cap thresholds can be
-        # resolved against the t=0 population in apply_vaccinations.
-        initial_conditions = create_initial_conditions(
-            model,
-            request.initial_conditions,
-            preset_default=preset_def.default_initial_conditions if preset_def else None,
-        )
+    # Add age-varying base parameters now that the population is resolved.
+    apply_age_varying_parameters(model, list_params)
 
-        # Vaccination flow (source to vaccinated target). Mutates model in place;
-        # no-op when the request has no `vaccination` block. Returns the resolved
-        # flows (including V-SEIHR's defaulted Susceptible -> Susceptible_vax)
-        # so we can echo them in metadata.
-        resolved_flows = apply_vaccinations(
-            model,
-            request.vaccination,
-            internal_sim,
-            request.model.preset,
-            initial_conditions=initial_conditions,
-        )
+    # Inject preset-scoped parameter conversions (period→rate, R0→β).
+    # Custom models (no preset) opt out: pass {} so nothing is injected.
+    preset_def = PRESETS[request.model.preset] if request.model.preset else None
+    conversions = preset_def.parameter_conversions if preset_def else {}
+    user_scalar_names = {
+        k for k, v in (request.model.parameters or {}).items() if not isinstance(v, str)
+    }
+    converted = resolve_parameter_conversions(model.parameters, user_scalar_names, conversions)
+    # User calc-params still win over registry-injected conversions on collision.
+    expr_params = {**converted, **expr_params}
 
-        # Create random number generator from seed if provided
-        rng = None
-        if internal_sim.seed is not None:
-            rng = np.random.default_rng(internal_sim.seed)
+    # Apply interventions
+    apply_interventions(model, request.interventions)
 
-        # Run simulations
-        results = model.run_simulations(
-            start_date=internal_sim.start_date,
-            end_date=internal_sim.end_date,
-            Nsim=internal_sim.Nsim,
-            dt=internal_sim.dt,
-            initial_conditions_dict=initial_conditions,
-            resample_frequency=internal_sim.resample_frequency,
-            rng=rng,
-        )
+    # Source-pass transforms first (balcan/scale/override on non-calc names).
+    # All downstream stages (transforms, vaccination, run, parameter extraction)
+    # use the padded `internal_sim`; the result is trimmed back to the user's
+    # original `end_date` before being returned.
+    calc_names = set(expr_params)
+    apply_parameter_transforms_sources(
+        model,
+        request.parameter_transforms,
+        internal_sim,
+        calculated_names=calc_names,
+    )
 
-        # Drop the padded trailing day(s) so the response matches the user's
-        # requested `end_date`. No-op when `dt >= 1.0` (no padding applied).
-        _trim_results_to_end_date(results, request.simulation.end_date)
+    # Evaluate calculated (expression) parameters now that all source
+    # values have their final shapes.
+    apply_calculated_parameters(model, expr_params)
 
-        # Process results
-        results_data = process_results(results, request.output, model)
+    # Calc-pass transforms on top of evaluated calc-params.
+    apply_parameter_transforms_calc(
+        model,
+        request.parameter_transforms,
+        internal_sim,
+        calculated_names=calc_names,
+    )
 
-        # Optionally attach effective per-step parameter arrays for plotting.
-        # Build them on the padded grid (so any time-array parameters baked in
-        # by transforms broadcast cleanly) and trim back to the user's range.
-        if request.output is not None and request.output.include_parameters:
-            params = extract_parameter_results(model, internal_sim)
-            results_data.parameters = _trim_parameter_results(params, request.simulation.end_date)
+    # Create initial conditions first so coverage-cap thresholds can be
+    # resolved against the t=0 population in apply_vaccinations.
+    initial_conditions = create_initial_conditions(
+        model,
+        request.initial_conditions,
+        preset_default=preset_def.default_initial_conditions if preset_def else None,
+    )
 
-        # Build metadata. Surface the resolved vaccination flows so callers can
-        # see the V-SEIHR default (Susceptible -> Susceptible_vax) rather than
-        # `flows: null`.
-        vaccination_metadata = request.vaccination
-        if vaccination_metadata is not None and resolved_flows is not None:
-            vaccination_metadata = vaccination_metadata.model_copy(update={"flows": resolved_flows})
-        metadata = SimulationMetadata(
-            model=ModelMetadata(
-                preset=request.model.preset,
-                compartments=model.compartments,
-            ),
-            population=_build_population_metadata(request.population, model.population),
-            simulation=_build_run_metadata(request),
-            interventions=request.interventions,
-            parameter_transforms=request.parameter_transforms,
-            vaccination=vaccination_metadata,
-        )
+    # Vaccination flow (source to vaccinated target). Mutates model in place;
+    # no-op when the request has no `vaccination` block. Returns the resolved
+    # flows (including V-SEIHR's defaulted Susceptible -> Susceptible_vax)
+    # so we can echo them in metadata.
+    resolved_flows = apply_vaccinations(
+        model,
+        request.vaccination,
+        internal_sim,
+        request.model.preset,
+        initial_conditions=initial_conditions,
+    )
 
-        return SimulationResponse(
-            simulation_id=simulation_id,
-            status="completed",
-            metadata=metadata,
-            results=results_data,
-        )
+    # Create random number generator from seed if provided
+    rng = None
+    if internal_sim.seed is not None:
+        rng = np.random.default_rng(internal_sim.seed)
 
-    except ValueError:
-        # Config validation errors propagate to the route as 422.
-        raise
-    except Exception as e:
-        if isinstance(request.population, CustomPopulationConfig):
-            pop_meta = PopulationMetadata(
-                source="custom",
-                name=request.population.name,
-                contacts_source=None,
-                layers=list(request.population.contact_matrices.keys()),
-                age_group_mapping=None,
-                total=0,
-                age_groups={},
-                contact_matrices=request.population.contact_matrices,
-            )
-        else:
-            pop_meta = PopulationMetadata(
-                source="builtin",
-                name=request.population.name,
-                contacts_source=request.population.contacts_source,
-                layers=request.population.layers,
-                age_group_mapping=request.population.age_group_mapping,
-                total=0,
-                age_groups={},
-                contact_matrices={},
-            )
-        return SimulationResponse(
-            simulation_id=simulation_id,
-            status="failed",
-            metadata=SimulationMetadata(
-                model=ModelMetadata(
-                    preset=request.model.preset,
-                    compartments=[],
-                ),
-                population=pop_meta,
-                simulation=_build_run_metadata(request),
-            ),
-            error=str(e),
-        )
+    # Run simulations
+    results = model.run_simulations(
+        start_date=internal_sim.start_date,
+        end_date=internal_sim.end_date,
+        Nsim=internal_sim.Nsim,
+        dt=internal_sim.dt,
+        initial_conditions_dict=initial_conditions,
+        resample_frequency=internal_sim.resample_frequency,
+        rng=rng,
+    )
+
+    # Drop the padded trailing day(s) so the response matches the user's
+    # requested `end_date`. No-op when `dt >= 1.0` (no padding applied).
+    _trim_results_to_end_date(results, request.simulation.end_date)
+
+    # Process results
+    results_data = process_results(results, request.output, model)
+
+    # Optionally attach effective per-step parameter arrays for plotting.
+    # Build them on the padded grid (so any time-array parameters baked in
+    # by transforms broadcast cleanly) and trim back to the user's range.
+    if request.output is not None and request.output.include_parameters:
+        params = extract_parameter_results(model, internal_sim)
+        results_data.parameters = _trim_parameter_results(params, request.simulation.end_date)
+
+    # Build metadata. Surface the resolved vaccination flows so callers can
+    # see the V-SEIHR default (Susceptible -> Susceptible_vax) rather than
+    # `flows: null`.
+    vaccination_metadata = request.vaccination
+    if vaccination_metadata is not None and resolved_flows is not None:
+        vaccination_metadata = vaccination_metadata.model_copy(update={"flows": resolved_flows})
+    metadata = SimulationMetadata(
+        model=ModelMetadata(
+            preset=request.model.preset,
+            compartments=model.compartments,
+        ),
+        population=_build_population_metadata(request.population, model.population),
+        simulation=_build_run_metadata(request),
+        interventions=request.interventions,
+        parameter_transforms=request.parameter_transforms,
+        vaccination=vaccination_metadata,
+    )
+
+    return SimulationResponse(
+        simulation_id=simulation_id,
+        status="completed",
+        metadata=metadata,
+        results=results_data,
+    )

@@ -3,13 +3,18 @@
 This module provides the endpoint for running epidemic simulations.
 """
 
+import logging
+
 from fastapi import APIRouter, Body, HTTPException
 from fastapi.openapi.models import Example
 
+from ....services.population_service import PopulationLoadTimeoutError
 from ....services.python_export import render_simulation_python
 from ....services.simulation_service import run_simulation
 from ...responses import PythonSourceResponse, python_source_response
 from ..schemas.simulation import SimulationRequest, SimulationResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -142,14 +147,18 @@ async def create_simulation(
     Raises
     ------
     HTTPException
-        400 if validation fails, 500 if simulation fails.
+        422 if the configuration is invalid, 504 if loading the population
+        times out, 500 on an unexpected internal error.
     """
     try:
         return run_simulation(request)
+    except PopulationLoadTimeoutError as e:
+        raise HTTPException(status_code=504, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Simulation failed: {str(e)}")
+    except Exception:
+        logger.exception("Simulation failed")
+        raise HTTPException(status_code=500, detail="Simulation failed due to an internal error.")
 
 
 @router.post(
