@@ -18,6 +18,7 @@ import uuid
 import numpy as np
 import pandas as pd
 from epydemix.model.simulation_results import SimulationResults
+from epydemix.population.population import Population
 
 from ..api.v1.schemas.simulation import (
     CustomPopulationConfig,
@@ -163,7 +164,9 @@ def _build_run_metadata(request: SimulationRequest) -> SimulationRunMetadata:
     )
 
 
-def run_simulation(request: SimulationRequest) -> SimulationResponse:
+def run_simulation(
+    request: SimulationRequest, population: Population | None = None
+) -> SimulationResponse:
     """Run an epidemic simulation based on the request configuration.
 
     This is the main orchestration function that executes the full
@@ -180,6 +183,8 @@ def run_simulation(request: SimulationRequest) -> SimulationResponse:
     request : SimulationRequest
         Complete simulation request containing model, population,
         simulation parameters, and output configuration.
+    population : Population or None
+        Independent population preloaded by the HTTP execution boundary.
 
     Returns
     -------
@@ -218,8 +223,11 @@ def run_simulation(request: SimulationRequest) -> SimulationResponse:
     # until after transforms so source shapes propagate through).
     model, list_params, expr_params = create_model(request.model)
 
-    # Setup population
-    setup_population(model, request.population)
+    # HTTP workers hand off an independent population loaded through the parent cache.
+    if population is None:
+        setup_population(model, request.population)
+    else:
+        model.set_population(population)
 
     # Add age-varying base parameters now that the population is resolved.
     apply_age_varying_parameters(model, list_params)
@@ -232,7 +240,7 @@ def run_simulation(request: SimulationRequest) -> SimulationResponse:
         k for k, v in (request.model.parameters or {}).items() if not isinstance(v, str)
     }
     converted, overridden = resolve_parameter_conversions(
-        model.parameters, user_scalar_names, conversions
+        model.parameters, user_scalar_names, conversions, set(expr_params)
     )
     # User calc-params still win over registry-injected conversions on collision.
     expr_params = {**converted, **expr_params}
@@ -316,53 +324,57 @@ def run_simulation(request: SimulationRequest) -> SimulationResponse:
     if internal_sim.seed is not None:
         rng = np.random.default_rng(internal_sim.seed)
 
-    # Run simulations
-    results = model.run_simulations(
-        start_date=internal_sim.start_date,
-        end_date=internal_sim.end_date,
-        Nsim=internal_sim.Nsim,
-        dt=internal_sim.dt,
-        initial_conditions_dict=initial_conditions,
-        resample_frequency=internal_sim.resample_frequency,
-        rng=rng,
-    )
+    try:
+        # Run simulations
+        results = model.run_simulations(
+            start_date=internal_sim.start_date,
+            end_date=internal_sim.end_date,
+            Nsim=internal_sim.Nsim,
+            dt=internal_sim.dt,
+            initial_conditions_dict=initial_conditions,
+            resample_frequency=None,
+            rng=rng,
+        )
 
-    # Drop the padded trailing day(s) so the response matches the user's
-    # requested `end_date`. No-op when `dt >= 1.0` (no padding applied).
-    _trim_results_to_end_date(results, request.simulation.end_date)
+        # Trim raw steps before aggregation; partial weeks/months have later labels.
+        _trim_results_to_end_date(results, request.simulation.end_date)
+        for trajectory in results.trajectories:
+            trajectory.resample(request.simulation.resample_frequency)
 
-    # Process results
-    results_data = process_results(results, request.output, model)
+        # Process results
+        results_data = process_results(results, request.output, model)
 
-    # Optionally attach effective per-step parameter arrays for plotting.
-    # Build them on the padded grid (so any time-array parameters baked in
-    # by transforms broadcast cleanly) and trim back to the user's range.
-    if request.output is not None and request.output.include_parameters:
-        params = extract_parameter_results(model, internal_sim)
-        results_data.parameters = _trim_parameter_results(params, request.simulation.end_date)
+        # Optionally attach effective per-step parameter arrays for plotting.
+        # Build them on the padded grid (so any time-array parameters baked in
+        # by transforms broadcast cleanly) and trim back to the user's range.
+        if request.output is not None and request.output.include_parameters:
+            params = extract_parameter_results(model, internal_sim)
+            results_data.parameters = _trim_parameter_results(params, request.simulation.end_date)
 
-    # Build metadata. Surface the resolved vaccination flows so callers can
-    # see the V-SEIHR default (Susceptible -> Susceptible_vax) rather than
-    # `flows: null`.
-    vaccination_metadata = request.vaccination
-    if vaccination_metadata is not None and resolved_flows is not None:
-        vaccination_metadata = vaccination_metadata.model_copy(update={"flows": resolved_flows})
-    metadata = SimulationMetadata(
-        model=ModelMetadata(
-            preset=request.model.preset,
-            compartments=model.compartments,
-        ),
-        population=_build_population_metadata(request.population, model.population),
-        simulation=_build_run_metadata(request),
-        interventions=request.interventions,
-        parameter_transforms=request.parameter_transforms,
-        vaccination=vaccination_metadata,
-    )
+        # Build metadata. Surface the resolved vaccination flows so callers can
+        # see the V-SEIHR default (Susceptible -> Susceptible_vax) rather than
+        # `flows: null`.
+        vaccination_metadata = request.vaccination
+        if vaccination_metadata is not None and resolved_flows is not None:
+            vaccination_metadata = vaccination_metadata.model_copy(update={"flows": resolved_flows})
+        metadata = SimulationMetadata(
+            model=ModelMetadata(
+                preset=request.model.preset,
+                compartments=model.compartments,
+            ),
+            population=_build_population_metadata(request.population, model.population),
+            simulation=_build_run_metadata(request),
+            interventions=request.interventions,
+            parameter_transforms=request.parameter_transforms,
+            vaccination=vaccination_metadata,
+        )
 
-    return SimulationResponse(
-        simulation_id=simulation_id,
-        status="completed",
-        metadata=metadata,
-        results=results_data,
-        warnings=warnings,
-    )
+        return SimulationResponse(
+            simulation_id=simulation_id,
+            status="completed",
+            metadata=metadata,
+            results=results_data,
+            warnings=warnings,
+        )
+    except ValueError as exc:
+        raise RuntimeError("Simulation execution or result processing failed") from exc

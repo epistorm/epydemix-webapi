@@ -9,7 +9,7 @@ in ``parameter_transforms_service`` and population loading lives in
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 from epydemix.model.epimodel import EpiModel
@@ -24,6 +24,7 @@ from ..api.v1.schemas.simulation import (
 )
 from ..presets import PRESETS
 from ..utils.calculated_parameters import compute_reserved_params, evaluate_expressions
+from ..utils.dates import format_date_axis
 from ..utils.parameter_transforms import broadcast_to_time_and_age
 
 
@@ -125,8 +126,9 @@ def create_initial_conditions(
     """Create initial conditions dictionary from configuration.
 
     Builds initial conditions either from absolute counts per compartment
-    or from percentages of the total population. If no config is supplied
-    and the preset provides its own ``default_initial_conditions`` callable,
+    or from percentages of the total population. If no config or an empty
+    percentage mapping is supplied and the preset provides its own
+    ``default_initial_conditions`` callable,
     that is used; otherwise we fall through to epydemix's built-in default.
 
     Parameters
@@ -137,7 +139,7 @@ def create_initial_conditions(
         Initial conditions configuration.
     preset_default : callable, optional
         Preset-supplied default initial conditions builder. Invoked only when
-        ``config`` is None.
+        ``config`` is None or an empty percentage mapping.
 
     Returns
     -------
@@ -145,7 +147,7 @@ def create_initial_conditions(
         Dictionary mapping compartment names to arrays of counts per age group,
         or None to use epydemix default initial conditions.
     """
-    if config is None:
+    if config is None or (config.method == "percentage" and not config.initial_percentages):
         if preset_default is not None:
             return preset_default(model)
         return None
@@ -264,7 +266,7 @@ def extract_parameter_results(
     age_groups = [str(name) for name in model.population.Nk_names]
     N = len(age_groups)
 
-    date_strs = [str(np.datetime_as_string(d, unit="D")) for d in dates]
+    date_strs = format_date_axis(dates)
 
     data: dict[str, dict[str, list[float]]] = {}
     for name, value in model.parameters.items():

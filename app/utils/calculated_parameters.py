@@ -15,6 +15,7 @@ injected into the eval namespace alongside user parameters; see
 from __future__ import annotations
 
 import ast
+import math
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -52,17 +53,22 @@ _ALLOWED_NODES: tuple[type[ast.AST], ...] = (
 
 def _parse(expr: str, param_name: str) -> ast.Expression:
     """Parse ``expr`` in eval mode, re-raising syntax errors with parameter context."""
+    if len(expr) > 2000:
+        raise ValueError(f"Calculated parameter '{param_name}' expression exceeds 2000 characters")
     try:
         return ast.parse(expr, mode="eval")
-    except SyntaxError as e:
+    except (SyntaxError, RecursionError) as e:
         raise ValueError(
-            f"Calculated parameter '{param_name}' has invalid expression {expr!r}: {e.msg}"
+            f"Calculated parameter '{param_name}' has invalid expression {expr!r}: {e}"
         ) from e
 
 
 def _validate(tree: ast.AST, param_name: str) -> None:
     """Walk the AST and raise ValueError on any node outside the allow-list."""
-    for node in ast.walk(tree):
+    nodes = list(ast.walk(tree))
+    if len(nodes) > 200:
+        raise ValueError(f"Calculated parameter '{param_name}' expression exceeds 200 AST nodes")
+    for node in nodes:
         if isinstance(node, _ALLOWED_NODES):
             if isinstance(node, ast.BinOp) and not isinstance(node.op, _ALLOWED_BINOPS):
                 raise ValueError(
@@ -88,6 +94,26 @@ def _validate(tree: ast.AST, param_name: str) -> None:
             f"supported (no function calls, attribute access, subscripts, "
             f"comparisons, or conditionals)."
         )
+
+
+def parse_expression(expr: str, param_name: str) -> ast.Expression:
+    """Validate arithmetic and normalize literals to bounded floating-point values."""
+    tree = _parse(expr, param_name)
+    _validate(tree, param_name)
+    # Float literals prevent Python's unbounded integer exponentiation.
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant):
+            try:
+                node.value = float(node.value)
+            except OverflowError as exc:
+                raise ValueError(
+                    f"Calculated parameter '{param_name}' has an oversized numeric literal"
+                ) from exc
+            if not math.isfinite(node.value):
+                raise ValueError(
+                    f"Calculated parameter '{param_name}' has a non-finite numeric literal"
+                )
+    return tree
 
 
 def extract_dependencies(tree: ast.AST) -> set[str]:
@@ -161,8 +187,7 @@ def evaluate_expressions(
     trees: dict[str, ast.Expression] = {}
     deps: dict[str, set[str]] = {}
     for name, expr in expr_params.items():
-        tree = _parse(expr, name)
-        _validate(tree, name)
+        tree = parse_expression(expr, name)
         trees[name] = tree
         deps[name] = extract_dependencies(tree)
 
@@ -183,7 +208,13 @@ def evaluate_expressions(
     # This is the same convention `_broadcast` already encodes implicitly:
     # 1D arrays in `model.parameters` mean "time-varying, age-uniform".
     namespace: dict[str, object] = {
-        k: (v.reshape(-1, 1) if isinstance(v, np.ndarray) and v.ndim == 1 else v)
+        k: (
+            v.reshape(-1, 1)
+            if isinstance(v, np.ndarray) and v.ndim == 1
+            else float(v)
+            if isinstance(v, (int, float))
+            else v
+        )
         for k, v in resolved_params.items()
     }
 
@@ -191,7 +222,10 @@ def evaluate_expressions(
     for name in order:
         code = compile(trees[name], filename=f"<calc:{name}>", mode="eval")
         try:
-            value = eval(code, {"__builtins__": {}}, namespace)  # noqa: S307
+            with np.errstate(all="raise"):
+                value = eval(code, {"__builtins__": {}}, namespace)  # noqa: S307
+            if np.iscomplexobj(value) or not np.all(np.isfinite(value)):
+                raise ValueError("expression must produce finite real numbers")
         except Exception as e:
             raise ValueError(f"Calculated parameter '{name}' failed to evaluate: {e}") from e
 

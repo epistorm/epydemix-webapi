@@ -159,3 +159,22 @@ def test_internal_error_is_500_without_details(client, monkeypatch, caplog):
     assert response.status_code == 500
     assert "secret" not in response.text
     assert "secret internal failure" in caplog.text
+
+
+@pytest.mark.parametrize("stage", ["engine", "results"])
+def test_internal_value_errors_are_not_client_input_errors(monkeypatch, stage):
+    from epydemix.model.epimodel import EpiModel
+
+    from app.api.v1.schemas.simulation import SimulationRequest
+    from app.services import simulation_service
+
+    def broken(*args, **kwargs):
+        raise ValueError("secret internal failure")
+
+    if stage == "engine":
+        monkeypatch.setattr(EpiModel, "run_simulations", broken)
+    else:
+        monkeypatch.setattr(simulation_service, "process_results", broken)
+    with pytest.raises(RuntimeError, match="execution or result processing") as error:
+        simulation_service.run_simulation(SimulationRequest.model_validate(BASE))
+    assert isinstance(error.value.__cause__, ValueError)
