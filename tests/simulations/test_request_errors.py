@@ -30,12 +30,19 @@ def _request(**sections):
 
 
 INVALID = {
+    # 2025-02-30 is invalid because February has no 30th day.
     "nonexistent_date": _request(simulation={"start_date": "2025-02-30"}),
+    # 2025/01/31 uses slashes instead of the required YYYY-MM-DD format.
     "slash_date": _request(simulation={"end_date": "2025/01/31"}),
+    # 2025-1-31 is invalid because the month must be zero-padded.
     "unpadded_date": _request(simulation={"end_date": "2025-1-31"}),
+    # 2025-02-01 is after the default end date of 2025-01-31.
     "reversed_period": _request(simulation={"start_date": "2025-02-01"}),
+    # A same-day run with dt=1 has only 1 time step; at least 3 are required.
     "same_day": _request(simulation={"end_date": "2025-01-01"}),
+    # A two-day run with dt=1 has only 2 time steps; at least 3 are required.
     "two_days": _request(simulation={"end_date": "2025-01-02"}),
+    # The intervention ends on 2025-01-05 before it starts on 2025-01-10.
     "intervention_reversed": _request(
         interventions=[
             {
@@ -46,11 +53,13 @@ INVALID = {
             }
         ]
     ),
+    # 2025-13-01 is invalid because month 13 does not exist.
     "intervention_bad_date": _request(
         interventions=[
             {**WINDOW, "layer_name": "all", "end_date": "2025-13-01", "reduction_factor": 0.5}
         ]
     ),
+    # 2025-01-32 is invalid because January has no 32nd day.
     "scale_bad_date": _request(
         parameter_transforms=[
             {
@@ -62,6 +71,7 @@ INVALID = {
             }
         ]
     ),
+    # Jan 15 2025 does not match the required YYYY-MM-DD format.
     "balcan_bad_date": _request(
         parameter_transforms=[
             {
@@ -72,6 +82,7 @@ INVALID = {
             }
         ]
     ),
+    # 2025-02-29 is invalid because 2025 is not a leap year.
     "campaign_bad_date": _request(
         model={"preset": "V-SEIR"},
         vaccination={
@@ -84,9 +95,11 @@ INVALID = {
             ]
         },
     ),
+    # Infectious is not a SIR compartment; the correct name is Infected.
     "initial_percentage_typo": _request(
         initial_conditions={"initial_percentages": {"Infectious": 1}}
     ),
+    # Infectious is not a SIR compartment; the correct name is Infected.
     "initial_absolute_typo": _request(
         initial_conditions={
             "method": "absolute",
