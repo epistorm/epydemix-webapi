@@ -32,7 +32,7 @@ We'll use the `SIR` preset. See [Model Presets](./model/presets/overview.mdx) fo
     "model": {
       "preset": "SIR",
       "parameters": {
-        "transmission_rate": 0.3,
+        "R0": 2.5,
         "recovery_rate": 0.1
       }
     },
@@ -55,7 +55,7 @@ The `initial_conditions` block seeds the compartments at the start of the simula
 
 ## 4. Read the response
 
-The response contains `metadata`, `results`, and a `status` field. By default the API returns everything: all compartments and transitions, all age groups (plus `total`), all seven standard quantiles, and a `summary` with peaks and cumulative totals per age group. You can narrow any of these via `output` (see [Customizing output](#5-customizing-output)).
+The response contains `metadata`, `results`, `warnings`, and a `status` field. By default the API returns everything: all compartments and transitions, all age groups (plus `total`), all seven standard quantiles, and a `summary` with peaks and cumulative totals per age group. You can narrow any of these via `output` (see [Customizing output](#5-customizing-output)).
 
 ```json
 {
@@ -95,9 +95,9 @@ The response contains `metadata`, `results`, and a `status` field. By default th
       "data": {
         "Susceptible": {
           "total": {
-            "0.5": [337330136.0, 334286966.0, "..."],
-            "0.025": [337330089.45, 334285584.7, "..."],
-            "0.975": [337330182.55, 334288347.3, "..."]
+            "0.5": [337708551.0, 337624028.5, "..."],
+            "0.025": [337708111.775, 337623521.8, "..."],
+            "0.975": [337709191.6, 337625019.0, "..."]
           }
         }
       }
@@ -107,9 +107,9 @@ The response contains `metadata`, `results`, and a `status` field. By default th
       "data": {
         "Susceptible_to_Infected": {
           "total": {
-            "0.5": [621391.0, 3043170.0, "..."],
-            "0.025": [621344.45, 3041835.25, "..."],
-            "0.975": [621437.55, 3044504.75, "..."]
+            "0.5": [73911.0, 84270.0, "..."],
+            "0.025": [73270.4, 83967.6, "..."],
+            "0.975": [74350.225, 85011.1, "..."]
           }
         }
       }
@@ -119,30 +119,58 @@ The response contains `metadata`, `results`, and a `status` field. By default th
         "Infected": {
           "total": {
             "quantiles": {
-              "0.025": 121800000.0,
-              "0.5":   124500000.0,
-              "0.975": 127100000.0
+              "0.025": 71966341.525,
+              "0.5":   71990700.5,
+              "0.975": 72009849.2
             },
-            "peak_date": "2024-02-14"
+            "peak_date": "2024-02-21"
           },
-          "0-4":  { "quantiles": { "0.5": 4120000.0, "...": 0 }, "peak_date": "2024-02-13" },
-          "65+":  { "quantiles": { "0.5": 16800000.0, "...": 0 }, "peak_date": "2024-02-16" }
+          "0-4":  { "quantiles": { "0.5": 3593518.5, "...": 0 }, "peak_date": "2024-02-23" },
+          "65+":  { "quantiles": { "0.5": 8681842.5, "...": 0 }, "peak_date": "2024-02-27" }
         }
       },
       "totals": {
         "Susceptible_to_Infected": {
-          "total": { "quantiles": { "0.025": 213000000.0, "0.5": 215000000.0, "0.975": 217000000.0 } },
-          "0-4":   { "quantiles": { "0.5":  11800000.0, "...": 0 } }
+          "total": { "quantiles": { "0.025": 281387422.725, "0.5": 281428513.5, "0.975": 281457329.9 } },
+          "0-4":   { "quantiles": { "0.5":  14368532.5, "...": 0 } }
         }
       }
     }
-  }
+  },
+  "warnings": []
 }
 ```
 
 Results are organized as quantiles (median, confidence intervals) across simulation runs. Both `compartments` and `transitions` follow the same nested structure: `name -> age_group -> quantile -> [values]`. The `total` age group is the sum across all age groups.
 
 `summary` mirrors that shape without the time dimension. `peaks` is `compartment -> age_group -> {quantiles, peak_date}` and carries the maximum value reached during the simulation window per quantile. `totals` is `transition -> age_group -> {quantiles}` and carries the cumulative number of transition events over the whole window.
+
+`warnings` is an empty list when there is nothing to report. For example, passing both `infectious_period` and `recovery_rate` to a preset uses `recovery_rate` and returns:
+
+```json
+"warnings": [
+  {
+    "code": "parameter_overridden",
+    "parameter": "infectious_period",
+    "overridden_by": "recovery_rate",
+    "message": "infectious_period was ignored because recovery_rate was explicitly provided."
+  }
+]
+```
+
+See [Warnings](./warnings.mdx) for the codes and how to resolve them.
+
+### Errors
+
+A successful run returns HTTP `200` with `"status": "completed"`. If a run cannot complete, the API returns an HTTP error with a `detail` message instead:
+
+| Status | When |
+|---|---|
+| `422` | The request is invalid. These checks run before the simulation starts. Examples: a date that is not a real `YYYY-MM-DD` date, an `end_date` before its `start_date`, an `initial_conditions` compartment that is not in the model, an unknown intervention layer, or a transition rate that is negative after evaluation. |
+| `504` | Loading a built-in population timed out. Retry the request. |
+| `500` | An unexpected internal error occurred. The details are logged on the server and not returned. |
+
+A simulation needs at least 3 time steps. With the default `dt: 1`, `end_date` must be at least 2 days after `start_date`. The [Python export](./python-exports.mdx) endpoint applies the same input checks.
 
 ## 5. Customizing output
 
@@ -180,7 +208,7 @@ For a quick read of one stat from the response, pipe through [`jq`](https://jqla
 {`curl -s -X POST BASE_URL/simulations \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": {"preset": "SIR", "parameters": {"transmission_rate": 0.3, "recovery_rate": 0.1}},
+    "model": {"preset": "SIR", "parameters": {"R0": 2.5, "recovery_rate": 0.1}},
     "population": {"name": "United_States"},
     "simulation": {"start_date": "2024-01-01", "end_date": "2024-06-01", "Nsim": 100}
   }' | jq '.results.summary.peaks.Infected.total | {peak_date, median: .quantiles["0.5"]}'`}
@@ -188,8 +216,8 @@ For a quick read of one stat from the response, pipe through [`jq`](https://jqla
 
 ```json
 {
-  "peak_date": "2024-01-06",
-  "median": 290283372.5
+  "peak_date": "2024-02-26",
+  "median": 71936946.5
 }
 ```
 

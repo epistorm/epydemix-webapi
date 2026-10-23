@@ -151,6 +151,14 @@ def create_initial_conditions(
         return None
 
     if config.method == "absolute" and config.compartments:
+        # Check initial count lengths.
+        n_groups = len(model.population.Nk)
+        for name, counts in config.compartments.items():
+            if len(counts) != n_groups:
+                raise ValueError(
+                    f"initial_conditions.compartments['{name}'] has {len(counts)} value(s) "
+                    f"but the population has {n_groups} age groups"
+                )
         return {k: np.array(v) for k, v in config.compartments.items()}
 
     if config.method == "percentage" and config.initial_percentages:

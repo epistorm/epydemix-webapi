@@ -136,4 +136,4 @@ def compute_transform_array(
         )
         return np.array(values)
 
-    raise ValueError(f"compute_transform_array does not handle method '{transform_config.method}'")
+    raise TypeError(f"compute_transform_array does not handle method '{transform_config.method}'")

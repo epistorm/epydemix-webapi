@@ -1,6 +1,6 @@
 [project]
 name = "epydemix-webapi"
-version = "0.9.0"
+version = "0.10.0"
 description = "REST API for running epidemic simulations on epydemix"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,7 +13,7 @@ dependencies = [
     "pydantic-settings>=2.14.2",
     "uvicorn[standard]>=0.27.0",
     "gunicorn>=21.0.0",
-    "epydemix>=1.2.1",
+    "epydemix>=1.4.0",
     "fastapi-mcp>=0.4.0",
 ]
 

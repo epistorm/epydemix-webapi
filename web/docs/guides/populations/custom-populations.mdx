@@ -141,3 +141,6 @@ Requests that violate any of the following return `422`:
 | `contact_matrices` non-empty | `{}` |
 | Each matrix is `n` by `n` where `n = len(age_groups)` | row count mismatch, non-square rows |
 | Layer name is not `overall` | `{"overall": [[...]]}` |
+| Each age group count is positive | `{"A": 0}`, `{"A": -10}` |
+| Contact matrix entries are finite and non-negative | `[[-8, 0], [0, -6]]`, `1e400` |
+| Each intervention `layer_name` is one of the `contact_matrices` keys | `"school"` when only `all` is defined |

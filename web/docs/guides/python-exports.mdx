@@ -1,0 +1,192 @@
+---
+sidebar_position: 8
+---
+
+import EndpointSelector from '@site/src/components/EndpointSelector';
+import CurlBlock from '@site/src/components/CurlBlock';
+
+# Python Code Export
+
+<EndpointSelector />
+
+Export endpoints translate API resources into standalone programs that call
+epydemix directly and can run independently of the API server.
+
+## Export a simulation
+
+Send the same JSON accepted by `POST /simulations` to `/simulations/export/python`:
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations/export/python \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "SEIR",
+      "parameters": {
+        "R0": 2.5,
+        "incubation_period": 3.0,
+        "infectious_period": 2.5
+      }
+    },
+    "population": {"name": "United_States"},
+    "simulation": {
+      "start_date": "2025-08-01",
+      "end_date": "2026-07-31",
+      "Nsim": 100,
+      "seed": 42
+    },
+    "parameter_transforms": [{
+      "target_parameter": "transmission_rate",
+      "method": "balcan",
+      "max_date": "2026-01-15",
+      "min_date": "2026-07-15",
+      "min_value": 0.85
+    }]
+  }' \\
+  --output simulation.py`}
+</CurlBlock>
+
+### Example simulation Python output
+
+The response is a complete Python script. For the request above, its key
+sections look like this:
+
+```python
+import numpy as np
+
+from epydemix import EpiModel
+from epydemix.population import load_epydemix_population
+from epydemix.utils.utils import compute_simulation_dates
+
+# Helper functions for R0 conversion and Balcan seasonality are included here.
+
+start_date = '2025-08-01'
+end_date = '2026-07-31'
+dt = 1.0
+internal_end_date = end_date
+
+population = load_epydemix_population(
+    population_name='United_States',
+    contacts_source=None,
+    layers=['home', 'work', 'school', 'community'],
+    age_group_mapping=None,
+    data_version="v1.2.0",
+)
+
+model = EpiModel(compartments=['Susceptible', 'Exposed', 'Infected', 'Recovered'])
+model.set_population(population)
+
+# Compartments, parameters, transitions, and calculated parameters are added here.
+
+model.add_parameter(
+    parameter_name='transmission_rate',
+    value=apply_balcan_seasonality(
+        value=model.get_parameter('transmission_rate'),
+        start_date='2025-08-01',
+        end_date=internal_end_date,
+        max_date='2026-01-15',
+        min_date='2026-07-15',
+        min_value=0.85,
+        max_value=1.0,
+        dt=1.0,
+    ),
+)
+
+initial_conditions = None
+
+rng = np.random.default_rng(42)
+results = model.run_simulations(
+    start_date=start_date,
+    end_date=internal_end_date,
+    Nsim=100,
+    dt=dt,
+    initial_conditions_dict=initial_conditions,
+    resample_frequency='D',
+    rng=rng,
+)
+
+quantiles = None
+compartment_quantiles = results.get_quantiles_compartments(quantiles=quantiles)
+transition_quantiles = results.get_quantiles_transitions(quantiles=quantiles)
+compartment_quantiles.to_csv("compartments.csv", index=False)
+transition_quantiles.to_csv("transitions.csv", index=False)
+```
+
+Run the exported program in an environment containing the matching epydemix
+version:
+
+```bash
+uv run simulation.py
+```
+
+The program writes `compartments.csv` and `transitions.csv`. When the request
+uses API-level conveniences such as R0 calibration, seasonality, scaling, or
+vaccination campaigns, the exporter includes the required standalone helper
+definitions.
+
+Provide `simulation.seed` when you need reproducible stochastic trajectories.
+
+## Export population commands
+
+<CurlBlock>
+{`# List available populations
+curl BASE_URL/populations/export/python --output list_populations.py
+
+# Load and inspect one population
+curl "BASE_URL/populations/United_States/export/python?contacts_source=mistry_2021" \\
+  --output population.py
+
+# Load selected contact layers
+curl "BASE_URL/populations/United_States/contacts/export/python?layers=home&layers=work" \\
+  --output contacts.py`}
+</CurlBlock>
+
+To export an inline population, post the custom-population block directly:
+
+<CurlBlock>
+{`curl -X POST BASE_URL/populations/export/python \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "source": "custom",
+    "name": "Two groups",
+    "age_groups": {"younger": 80000, "older": 20000},
+    "contact_matrices": {
+      "all": [[8.0, 1.5], [2.0, 4.0]]
+    }
+  }' \\
+  --output custom_population.py`}
+</CurlBlock>
+
+### Example Python output
+
+The custom-population request above returns:
+
+```python
+import numpy as np
+
+from epydemix.population import Population
+
+population = Population(name='Two groups')
+population.add_population(
+    Nk=[80000.0, 20000.0],
+    Nk_names=['younger', 'older'],
+)
+population.add_contact_matrix(
+    contact_matrix=np.array([[8.0, 1.5], [2.0, 4.0]], dtype=float),
+    layer_name='all',
+)
+```
+
+## Export a preset
+
+<CurlBlock>
+{`curl BASE_URL/models/presets/SIR/export/python --output sir_model.py`}
+</CurlBlock>
+
+The preset export shows its compartments, default parameters, and explicit
+transitions. Population-dependent calculations are emitted by the simulation
+export once a population is available.
+
+Health checks, server cache statistics, and discovery endpoints are not
+exportable because they describe the web API service rather than epydemix
+objects or operations.
