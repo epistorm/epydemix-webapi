@@ -18,7 +18,7 @@ Specify the share of the population in each compartment as a **percentage** (not
 | Field | Type | Notes |
 |---|---|---|
 | `method` | `"percentage"` | Default. |
-| `initial_percentages` | `{compartment: number}` | Percentages of total population. `0.1` = 0.1%, `10.0` = 10%. |
+| `initial_percentages` | `{compartment: number}` | Percentages of total population. `0.1` = 0.1%, `10.0` = 10%. Each value must be between 0 and 100, and the values must sum to at most 100. |
 
 ### Example: seed 0.1% as infected
 
@@ -69,7 +69,7 @@ Specify exact counts per compartment per age group. You are responsible for maki
 | Field | Type | Notes |
 |---|---|---|
 | `method` | `"absolute"` | |
-| `compartments` | `{compartment: number[]}` | One array per compartment. Array length must equal the population's number of age groups. |
+| `compartments` | `{compartment: number[]}` | One array per compartment, with at least one compartment. Array length must equal the population's number of age groups. Counts must be finite and non-negative. |
 
 ### Example: explicit per-age counts
 
@@ -95,7 +95,7 @@ The five-bin default for `United_States` has age groups `[0-19, 20-49, 50-64, 65
   }'`}
 </CurlBlock>
 
-If the array length doesn't match the population's age groups, the request is rejected.
+If the array length doesn't match the population's age groups, the request is rejected with a `422`. A single-element array is not repeated across age groups.
 
 ## Default when omitted
 

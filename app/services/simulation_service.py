@@ -92,6 +92,28 @@ def _trim_parameter_results(params: ParameterResults, user_end_date: str) -> Par
     return ParameterResults(dates=params.dates[:n_keep], data=trimmed_data)
 
 
+def _validate_resolved_parameters(model, preset_def, transitions: list[dict]) -> None:
+    """Reject out-of-range values once parameters are evaluated and transformed.
+
+    Only parameters with a fixed meaning are checked: preset probabilities must
+    stay in ``[0, 1]`` and transition rates must be finite and non-negative.
+    Other parameters may be arbitrary expression helpers.
+    """
+    # Check probabilities are finite and between 0 and 1.
+    for name in preset_def.probability_parameters if preset_def else ():
+        values = np.asarray(model.parameters[name], dtype=float)
+        if not np.all(np.isfinite(values) & (values >= 0) & (values <= 1)):
+            raise ValueError(f"Parameter '{name}' must be between 0 and 1")
+    # Check transition rates are finite and non-negative.
+    for name in dict.fromkeys(t["params"][0] for t in transitions):
+        values = np.asarray(model.parameters[name], dtype=float)
+        if not np.all(np.isfinite(values)) or np.any(values < 0):
+            raise ValueError(
+                f"Transition rate '{name}' must be finite and non-negative "
+                f"(minimum {np.nanmin(values):g})"
+            )
+
+
 def _build_population_metadata(
     request_population: PopulationConfig,
     model_population,
@@ -261,6 +283,13 @@ def run_simulation(request: SimulationRequest) -> SimulationResponse:
         internal_sim,
         calculated_names=calc_names,
     )
+
+    transitions = (
+        preset_def.transitions
+        if preset_def
+        else [t.model_dump() for t in request.model.transitions or []]
+    )
+    _validate_resolved_parameters(model, preset_def, transitions)
 
     # Create initial conditions first so coverage-cap thresholds can be
     # resolved against the t=0 population in apply_vaccinations.

@@ -46,6 +46,8 @@ There are two kinds:
 - **Spontaneous**: occurs at a fixed rate, independent of other compartments. `params` is a single parameter name.
 - **Mediated**: rate depends on the proportion of individuals in another compartment. `params` is a two-element list `[rate_parameter, mediating_compartment]`.
 
+The rate parameter must be defined in `parameters`, and the mediating compartment must be one of `compartments`. Otherwise the request is rejected with a `422`. After expressions and transforms are evaluated, every transition rate must be finite and non-negative. Rates above 1 are allowed.
+
 Examples:
 
 ```json

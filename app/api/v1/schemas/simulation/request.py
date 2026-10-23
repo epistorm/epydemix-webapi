@@ -3,15 +3,29 @@
 from datetime import date
 from typing import Annotated, Any, Literal, TypeAlias
 
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
+from pandas.tseries.frequencies import to_offset
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from .....presets import PRESETS, preset_names
+from .....utils.calculated_parameters import RESERVED_NAMES
 from ..common import DateStr
 from .transforms import ParameterTransformConfig
 
 # Preset literal sourced from the registry so adding a preset doesn't require
 # editing this file.
 PresetName: TypeAlias = Literal[preset_names()]  # type: ignore[valid-type]
+
+
+DEFAULT_LAYERS = ["home", "work", "school", "community"]
+
+NonNegativeFloat = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 
 
 def _ensure_list(v: str | list[str]) -> list[str]:
@@ -117,6 +131,37 @@ class ModelConfig(BaseModel):
             raise ValueError(
                 "Either 'preset' must be specified, or both 'compartments' and 'transitions' must be provided"
             )
+        if self.preset is None:
+            defined = set(self.parameters) | RESERVED_NAMES
+            for i, transition in enumerate(self.transitions):
+                expected = 2 if transition.kind == "mediated" else 1
+                if len(transition.params) != expected:
+                    raise ValueError(
+                        f"transitions[{i}]: a {transition.kind} transition takes {expected} "
+                        f"param(s), got {len(transition.params)}"
+                    )
+                if transition.params[0] not in defined:
+                    raise ValueError(
+                        f"transitions[{i}]: rate parameter '{transition.params[0]}' is not "
+                        "defined in 'parameters'"
+                    )
+                if transition.kind == "mediated" and transition.params[1] not in self.compartments:
+                    raise ValueError(
+                        f"transitions[{i}]: mediating compartment '{transition.params[1]}' "
+                        "is not in 'compartments'"
+                    )
+        else:
+            # Period -> rate conversions take the reciprocal, so the period must be positive.
+            for derived, conv in PRESETS[self.preset].parameter_conversions.items():
+                value = self.parameters.get(conv.source)
+                if (
+                    conv.expression != f"1 / {conv.source}"
+                    or value is None
+                    or isinstance(value, str)
+                ):
+                    continue
+                if any(v <= 0 for v in (value if isinstance(value, list) else [value])):
+                    raise ValueError(f"'{conv.source}' must be > 0 to derive '{derived}'")
         return self
 
 
@@ -159,21 +204,22 @@ class CustomPopulationConfig(BaseModel):
         default="Custom Population",
         description="Display label for this population.",
     )
-    age_groups: dict[str, int] = Field(
+    age_groups: dict[str, Annotated[int, Field(gt=0)]] = Field(
         ...,
         description=(
             "Age group label to population count. Insertion order defines the row/column "
-            "order used by every entry in `contact_matrices`.\n"
+            "order used by every entry in `contact_matrices`. Counts must be positive.\n"
             '- Homogeneous (single group): `{"A": 100000}`.\n'
             '- Two groups: `{"A": 100, "B": 100}`.'
         ),
     )
-    contact_matrices: dict[str, list[list[float]]] = Field(
+    contact_matrices: dict[str, list[list[NonNegativeFloat]]] = Field(
         ...,
         description=(
             "Contact matrices keyed by layer name. The keys define the layer set; each "
             "matrix must be square with one row/column per `age_groups` entry, in the same "
-            'order. Layer name `"overall"` is reserved by epydemix and rejected.\n'
+            'order. Entries must be finite and non-negative. Layer name `"overall"` is '
+            "reserved by epydemix and rejected.\n"
             '- Homogeneous (1x1): `{"all": [[1.0]]}`.\n'
             '- Two groups (2x2): `{"all": [[0.2, 0.3], [0.3, 0.2]]}`.'
         ),
@@ -218,12 +264,28 @@ class SimulationConfig(BaseModel):
     start_date: DateStr = Field(..., description="Start date in `YYYY-MM-DD` format.")
     end_date: DateStr = Field(..., description="End date in `YYYY-MM-DD` format.")
     Nsim: int = Field(default=10, ge=1, le=1000, description="Number of simulation runs.")
-    dt: float = Field(default=1.0, gt=0, description="Time step in days.")
+    dt: float = Field(default=1.0, gt=0, allow_inf_nan=False, description="Time step in days.")
     seed: int | None = Field(default=None, description="Random seed for reproducibility.")
     resample_frequency: str = Field(
         default="D",
-        description="Resampling frequency. `D` = daily, `W` = weekly, `M` = monthly.",
+        description=(
+            "Resampling frequency as a positive pandas offset alias. "
+            "`D` = daily, `W` = weekly, `ME` = month end."
+        ),
     )
+
+    @field_validator("resample_frequency")
+    @classmethod
+    def _validate_frequency(cls, value: str) -> str:
+        try:
+            offset = to_offset(value)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"'{value}' is not a valid pandas frequency (e.g. 'D', 'W', 'ME')"
+            ) from None
+        if offset.n <= 0:
+            raise ValueError(f"'{value}' must be a positive interval")
+        return value
 
     @model_validator(mode="after")
     def _validate_period(self) -> "SimulationConfig":
@@ -251,15 +313,17 @@ class InitialConditionsConfig(BaseModel):
     method: Literal["percentage", "absolute"] = Field(
         default="percentage", description="Method: `percentage` or `absolute`."
     )
-    initial_percentages: dict[str, float] | None = Field(
+    initial_percentages: (
+        dict[str, Annotated[float, Field(ge=0, le=100, allow_inf_nan=False)]] | None
+    ) = Field(
         default=None,
         description=(
             "Percentage (0-100, not a fraction) of the population in each compartment. "
-            "Remainder goes to the first compartment.\n"
+            "Values must sum to at most 100. Remainder goes to the first compartment.\n"
             '- Example: `{"I": 0.01, "R": 10.0}` puts 0.01% in `I` and 10% in `R`.'
         ),
     )
-    compartments: dict[str, list[float]] | None = Field(
+    compartments: dict[str, list[NonNegativeFloat]] | None = Field(
         default=None,
         description=(
             "Absolute counts per compartment per age group. Required when method is `absolute`. "
@@ -271,8 +335,10 @@ class InitialConditionsConfig(BaseModel):
     @model_validator(mode="after")
     def validate_initial_conditions(self) -> "InitialConditionsConfig":
         """Validate that absolute method has compartments specified."""
-        if self.method == "absolute" and self.compartments is None:
+        if self.method == "absolute" and not self.compartments:
             raise ValueError("'compartments' must be provided when method is 'absolute'")
+        if self.initial_percentages and sum(self.initial_percentages.values()) > 100:
+            raise ValueError("'initial_percentages' must sum to at most 100")
         return self
 
 
@@ -651,6 +717,43 @@ class SimulationRequest(BaseModel):
             if isinstance(pop, dict) and "source" not in pop:
                 data = {**data, "population": {**pop, "source": "builtin"}}
         return data
+
+    @model_validator(mode="after")
+    def _validate_population_references(self) -> "SimulationRequest":
+        """Check intervention layers and initial-count lengths against the population.
+
+        Interventions must target a configured contact layer. For custom populations,
+        each absolute initial-count array must contain one value per age group.
+        Inconsistent inputs raise ValueError and produce an HTTP 422 response.
+        """
+        population = self.population
+        # Check layers.
+        if isinstance(population, CustomPopulationConfig):
+            layers = list(population.contact_matrices)
+        else:
+            layers = population.layers or DEFAULT_LAYERS
+        for i, intervention in enumerate(self.interventions or []):
+            if intervention.layer_name not in layers:
+                raise ValueError(
+                    f"interventions[{i}].layer_name '{intervention.layer_name}' is not a "
+                    f"contact layer of the population. Layers are {layers}."
+                )
+        initial = self.initial_conditions
+        # Check initial count lengths.
+        # Builtin group counts are checked after loading in create_initial_conditions.
+        if (
+            isinstance(population, CustomPopulationConfig)
+            and initial is not None
+            and initial.method == "absolute"
+        ):
+            n_groups = len(population.age_groups)
+            for name, counts in (initial.compartments or {}).items():
+                if len(counts) != n_groups:
+                    raise ValueError(
+                        f"initial_conditions.compartments['{name}'] has {len(counts)} "
+                        f"value(s) but the population has {n_groups} age groups"
+                    )
+        return self
 
     @model_validator(mode="after")
     def _validate_initial_compartments(self) -> "SimulationRequest":
