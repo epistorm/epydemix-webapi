@@ -47,6 +47,7 @@ def resolve_parameter_conversions(
     model_parameters: dict[str, Any],
     user_scalar_names: set[str],
     conversions: dict[str, ParameterConversion],
+    expression_names: set[str] | None = None,
 ) -> tuple[dict[str, str], list[tuple[str, str]]]:
     """Inject calc-params for source scalars the user supplied on opted-in presets.
 
@@ -70,6 +71,9 @@ def resolve_parameter_conversions(
         DERIVED parameter name → conversion for the active preset. Custom
         models pass ``{}`` to opt out.
 
+    expression_names : set[str], optional
+        Deferred calculated parameters, also available as conversion sources.
+
     Returns
     -------
     dict[str, str]
@@ -84,7 +88,7 @@ def resolve_parameter_conversions(
     1. If ``name`` is in ``user_scalar_names`` (the user passed the derived
        parameter directly), drop ``conv.source`` from ``model_parameters`` and
        emit no calc-param. The user's scalar stands.
-    2. Else if ``conv.source`` is present in ``model_parameters``, emit
+    2. Else if ``conv.source`` is a stored or calculated parameter, emit
        ``name = conv.expression``.
     3. Else do nothing.
 
@@ -94,6 +98,7 @@ def resolve_parameter_conversions(
     calc-param injection and overrides the scalar default. No ``None``-as-
     disable handling needed here.
     """
+    available_names = set(model_parameters) | (expression_names or set())
     new_calc_params: dict[str, str] = {}
     overridden: list[tuple[str, str]] = []
     for derived_name, conv in conversions.items():
@@ -101,7 +106,7 @@ def resolve_parameter_conversions(
             model_parameters.pop(conv.source, None)
             overridden.append((conv.source, derived_name))
             continue
-        if conv.source not in model_parameters:
+        if conv.source not in available_names:
             continue
         new_calc_params[derived_name] = conv.expression
     return new_calc_params, overridden

@@ -15,7 +15,7 @@ class CompartmentResults(BaseModel):
 
     dates: list[str] = Field(
         ...,
-        description="Dates corresponding to values.",
+        description="Dates corresponding to values; ISO timestamps are used for subdaily samples.",
         examples=[["2024-01-01", "2024-01-02", "2024-01-03"]],
     )
     data: dict[str, dict[str, dict[str, list[float]]]] = Field(
@@ -47,7 +47,7 @@ class TransitionResults(BaseModel):
 
     dates: list[str] = Field(
         ...,
-        description="Dates corresponding to values.",
+        description="Dates corresponding to values; ISO timestamps are used for subdaily samples.",
         examples=[["2024-01-01", "2024-01-02", "2024-01-03"]],
     )
     data: dict[str, dict[str, dict[str, list[float]]]] = Field(
@@ -166,7 +166,7 @@ class TrajectoriesResults(BaseModel):
 
     dates: list[str] = Field(
         ...,
-        description="Dates corresponding to values.",
+        description="Dates corresponding to values; ISO timestamps are used for subdaily samples.",
         examples=[["2024-01-01", "2024-01-02", "2024-01-03"]],
     )
     runs: list[TrajectoryData] = Field(..., description="Data for each simulation run.")
@@ -180,7 +180,7 @@ class ParameterResults(BaseModel):
 
     dates: list[str] = Field(
         ...,
-        description="Dates corresponding to values, matching the simulator's internal grid.",
+        description="Dates matching the internal grid, with ISO timestamps for subdaily samples.",
         examples=[["2024-01-01", "2024-01-02", "2024-01-03"]],
     )
     data: dict[str, dict[str, list[float]]] = Field(

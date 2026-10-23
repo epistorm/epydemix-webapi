@@ -120,7 +120,8 @@ def test_subdaily_dt_parameter_results_match_dates(client):
     params = response.json()["results"]["parameters"]
     n_dates = len(params["dates"])
 
-    assert params["dates"][-1] == "2025-04-15"
+    assert pd.Timestamp(params["dates"][-1]).date().isoformat() == "2025-04-15"
+    assert len(set(params["dates"])) == n_dates
     for groups in params["data"].values():
         for values in groups.values():
             assert len(values) == n_dates
