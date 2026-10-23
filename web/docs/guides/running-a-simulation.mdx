@@ -160,7 +160,20 @@ Results are organized as quantiles (median, confidence intervals) across simulat
 
 See [Warnings](./warnings.mdx) for the codes and how to resolve them.
 
-### Errors
+### Output intervals
+
+`simulation.resample_frequency` controls aggregation, such as `D` for daily,
+`W` for weekly, or `ME` for month end. A partial final week or month is included;
+its label may fall after `simulation.end_date`, but its values contain only
+steps within the requested dates. Transition totals are preserved when changing
+the output interval. Daily axes use `YYYY-MM-DD`; axes with subdaily samples
+include ISO timestamps so each sample retains its time.
+
+`output.compartments`, `output.transitions`, and `output.age_groups` also filter
+raw trajectories when `output.include_trajectories` is enabled. An empty list
+omits that set of series; leaving the field out includes all of them.
+
+## Errors
 
 A successful run returns HTTP `200` with `"status": "completed"`. If a run cannot complete, the API returns an HTTP error with a `detail` message instead:
 
