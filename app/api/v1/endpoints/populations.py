@@ -155,6 +155,8 @@ async def get_populations() -> PopulationListResponse:
     """
     try:
         return population_service.list_populations()
+    except PopulationLoadTimeoutError as e:
+        raise HTTPException(status_code=504, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list populations: {str(e)}")
 
