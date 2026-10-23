@@ -151,6 +151,7 @@ def create_initial_conditions(
         return None
 
     if config.method == "absolute" and config.compartments:
+        # Check initial count lengths.
         n_groups = len(model.population.Nk)
         for name, counts in config.compartments.items():
             if len(counts) != n_groups:
