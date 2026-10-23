@@ -10,8 +10,12 @@ from ._build import add_transitions
 
 COMPARTMENTS: list[str] = ["Susceptible", "Exposed", "Infected", "Recovered"]
 
+# ``R0`` is a source default: ``PARAMETER_CONVERSIONS`` below derives
+# ``transmission_rate = R0 * recovery_rate / CONTACT_MATRIX_EIGENVALUE_ALL``
+# from the chosen population's contact matrix. An explicit
+# ``transmission_rate`` in the request wins and drops the ``R0`` default.
 DEFAULT_PARAMETERS: dict[str, float] = {
-    "transmission_rate": 0.3,
+    "R0": 2.5,
     "incubation_rate": 0.2,
     "recovery_rate": 0.1,
 }
@@ -43,7 +47,7 @@ TRANSITIONS: list[dict] = [
 ]
 
 # Friendlier source inputs the user can supply instead of the rate-form
-# defaults above. Resolved by ``app.utils.parameter_conversions``.
+# parameters above. Resolved by ``app.utils.parameter_conversions``.
 PARAMETER_CONVERSIONS: dict[str, ParameterConversion] = {
     "incubation_rate": ParameterConversion("incubation_period", "1 / incubation_period"),
     "recovery_rate": ParameterConversion("infectious_period", "1 / infectious_period"),

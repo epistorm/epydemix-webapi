@@ -538,7 +538,7 @@ wheels = [
 
 [[package]]
 name = "epydemix"
-version = "1.2.1"
+version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "evalidate" },
@@ -552,14 +552,14 @@ dependencies = [
     { name = "seaborn" },
     { name = "setuptools" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0e/1b/d669e272692f7de884b46dcde5b43ddd11ab61dd0c08579ad1efa24b4d73/epydemix-1.2.1.tar.gz", hash = "sha256:53014cd7e83d912bc767ff6dcd52086519a411bc215673317ac64a6f2762e3f5", size = 109995, upload-time = "2026-05-15T14:30:44.359Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f3/7b/77d637c2dc7a1c81ff6b6b0c9556519a253f4a8b515eec2d7f46efc678aa/epydemix-1.4.0.tar.gz", hash = "sha256:c3d5fdd51c59277daf11603316112e18668b7e5391892aa975dfc5a5149f7eb5", size = 130144, upload-time = "2026-10-12T14:51:19.938Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b3/6e/fc89ed249fc46fca29c9591668f82a19308ac6d64ad3080f07e940546dfb/epydemix-1.2.1-py3-none-any.whl", hash = "sha256:734026672aa14486a3ce78ea54974f3a6c14ab77b9427bccaca99092ae328673", size = 115115, upload-time = "2026-05-15T14:30:42.87Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/7b/6867434ad5ff4d9558d3c280ec1f850b35f0fda018a0acc4b93744accc0b/epydemix-1.4.0-py3-none-any.whl", hash = "sha256:b3207d52d4a9f744884b2d3c89cb37393e296c4f544b728fec59e2027f5cccd3", size = 136076, upload-time = "2026-10-12T14:51:18.864Z" },
 ]
 
 [[package]]
 name = "epydemix-webapi"
-version = "0.9.0"
+version = "0.10.0"
 source = { editable = "." }
 dependencies = [
     { name = "epydemix" },
@@ -594,7 +594,7 @@ docs = [
 
 [package.metadata]
 requires-dist = [
-    { name = "epydemix", specifier = ">=1.2.1" },
+    { name = "epydemix", specifier = ">=1.4.0" },
     { name = "fastapi", specifier = ">=0.109.0" },
     { name = "fastapi-mcp", specifier = ">=0.4.0" },
     { name = "gunicorn", specifier = ">=21.0.0" },

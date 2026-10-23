@@ -27,12 +27,10 @@ from ..api.v1.schemas.population import (
     PopulationSummary,
 )
 from ..api.v1.schemas.simulation import CustomPopulationConfig, PopulationConfig
+from ..api.v1.schemas.simulation.request import DEFAULT_LAYERS
 from ..config import settings
 
 logger = logging.getLogger(__name__)
-
-
-DEFAULT_LAYERS = ["home", "work", "school", "community"]
 
 
 class PopulationLoadTimeoutError(Exception):

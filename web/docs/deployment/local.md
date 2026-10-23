@@ -12,7 +12,7 @@ sidebar_label: Running the API Locally
 ## With uv
 
 ```bash
-git clone https://github.com/mu373/epydemix-webapi.git
+git clone https://github.com/epistorm/epydemix-webapi.git
 cd epydemix-webapi
 uv sync
 uv run uvicorn app.main:app --reload
