@@ -3,11 +3,18 @@
 This module provides the endpoint for running epidemic simulations.
 """
 
+import logging
+
 from fastapi import APIRouter, Body, HTTPException
 from fastapi.openapi.models import Example
 
+from ....services.population_service import PopulationLoadTimeoutError
+from ....services.python_export import render_simulation_python
 from ....services.simulation_service import run_simulation
+from ...responses import PythonSourceResponse, python_source_response
 from ..schemas.simulation import SimulationRequest, SimulationResponse
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -18,7 +25,7 @@ SIMULATION_REQUEST_EXAMPLES: dict[str, Example] = {
         value={
             "model": {
                 "preset": "SIR",
-                "parameters": {"transmission_rate": 0.3, "recovery_rate": 0.1},
+                "parameters": {"R0": 2.5, "recovery_rate": 0.1},
             },
             "population": {"name": "United_States"},
             "simulation": {
@@ -140,11 +147,36 @@ async def create_simulation(
     Raises
     ------
     HTTPException
-        400 if validation fails, 500 if simulation fails.
+        422 if the configuration is invalid, 504 if loading the population
+        times out, 500 on an unexpected internal error.
     """
     try:
         return run_simulation(request)
+    except PopulationLoadTimeoutError as e:
+        raise HTTPException(status_code=504, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Simulation failed: {str(e)}")
+    except Exception:
+        logger.exception("Simulation failed")
+        raise HTTPException(status_code=500, detail="Simulation failed due to an internal error.")
+
+
+@router.post(
+    "/export/python",
+    response_class=PythonSourceResponse,
+    summary="Export a simulation as Python",
+    description=(
+        "Render the simulation request as a standalone Python program that calls "
+        "epydemix directly. The simulation is not executed on the server."
+    ),
+    operation_id="export_simulation_python",
+)
+async def export_simulation_python(
+    request: SimulationRequest = Body(..., openapi_examples=SIMULATION_REQUEST_EXAMPLES),
+) -> PythonSourceResponse:
+    """Export a validated simulation request as executable Python."""
+    try:
+        source = render_simulation_python(request)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    return python_source_response(source, "epydemix_simulation.py")

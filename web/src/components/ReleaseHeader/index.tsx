@@ -1,7 +1,7 @@
 import {useDoc} from '@docusaurus/plugin-content-docs/client';
 import React from 'react';
 
-const REPO_URL = 'https://github.com/mu373/epydemix-webapi';
+const REPO_URL = 'https://github.com/epistorm/epydemix-webapi';
 
 // YAML parses unquoted `2026-05-04` as a JS Date. Render as plain
 // `YYYY-MM-DD` regardless of whether frontmatter passed a Date or a string.

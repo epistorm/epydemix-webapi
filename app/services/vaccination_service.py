@@ -198,7 +198,7 @@ def _build_schedule(
     if isinstance(rollout, FixedRateRollout):
         schedule = build_fixed_rate_schedule(dates, c_start, c_end, rollout.rate)
         return schedule, True
-    raise ValueError(f"Unknown rollout type: {type(rollout).__name__}")
+    raise TypeError(f"Unknown rollout type: {type(rollout).__name__}")
 
 
 def _resolve_coverage(

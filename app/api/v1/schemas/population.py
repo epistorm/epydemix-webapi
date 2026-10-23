@@ -146,7 +146,7 @@ class PresetInfo(BaseModel):
             "Default parameter values. A list value means the default is "
             "age-stratified (one entry per age group on the resolved population)."
         ),
-        examples=[{"transmission_rate": 0.3, "recovery_rate": 0.1}],
+        examples=[{"R0": 2.5, "recovery_rate": 0.1}],
     )
     transitions: list[dict] = Field(
         ...,
