@@ -75,4 +75,4 @@ def test_get_population_contacts_with_layers_filter(client):
 def test_get_nonexistent_population(client):
     """Test getting a population that doesn't exist."""
     response = client.get("/api/v1/populations/Nonexistent_Country")
-    assert response.status_code in [404, 500]  # Either not found or internal error
+    assert response.status_code == 404

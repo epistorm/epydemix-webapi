@@ -6,19 +6,26 @@ retrieving population details, and accessing contact matrices.
 
 import copy
 import functools
+import json
 import logging
+import subprocess
+import sys
+import time
+import weakref
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from concurrent.futures import TimeoutError as FuturesTimeoutError
+from contextvars import ContextVar
+from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import numpy as np
+import pandas as pd
+from epydemix.model.epimodel import EpiModel
 from epydemix.population.population import (
+    EPYDEMIX_DATA_BASE_URL,
     Population,
-    get_available_locations,
     load_epydemix_population,
 )
-
-from epydemix.model.epimodel import EpiModel
 
 from ..api.v1.schemas.population import (
     ContactMatrixResponse,
@@ -53,7 +60,9 @@ def get_locations_df():
     pd.DataFrame
         DataFrame containing available locations and their metadata.
     """
-    return get_available_locations()
+    with TemporaryDirectory(prefix="epydemix-locations-") as directory:
+        _download_files(Path(directory), ["locations.csv"], "locations")
+        return pd.read_csv(Path(directory) / "locations.csv")
 
 
 # Cache of per-population metadata (total_population, age_groups).
@@ -171,26 +180,93 @@ def list_populations() -> PopulationListResponse:
     return PopulationListResponse(populations=populations, total=len(populations))
 
 
-@functools.lru_cache(maxsize=50)
-def _load_population_cached_inner(name: str, contacts_source: str) -> Population:
-    """Load a population with caching (internal).
+# A deadline belongs to this call, not to the cached population's identity.
+_load_deadline: ContextVar[float | None] = ContextVar("population_load_deadline", default=None)
 
-    Parameters
-    ----------
-    name : str
-        Population name (e.g., 'United_States').
-    contacts_source : str
-        Contact matrix source (must be resolved, not None).
 
-    Returns
-    -------
-    Population
-        Loaded epydemix Population object.
-    """
-    return load_epydemix_population(
-        population_name=name,
-        contacts_source=contacts_source,
+@dataclass
+class _CachedPopulation:
+    population: Population
+
+
+# Only the LRU owns these wrappers; model copies cannot keep evicted entries alive.
+# Identity keys also distinguish duplicate concurrent misses of the same population.
+_cached_populations: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+_DATA_URL = f"{EPYDEMIX_DATA_BASE_URL}/v1.2.0/"
+
+
+def _download_files(directory: Path, paths: list[str], population_name: str) -> None:
+    """Fetch CSVs in a reaped child so DNS and slow-drip responses are bounded too."""
+    deadline = _load_deadline.get()
+    remaining = (
+        deadline - time.monotonic() if deadline is not None else settings.population_load_timeout
     )
+    if remaining <= 0:
+        raise PopulationLoadTimeoutError(population_name, settings.population_load_timeout)
+    try:
+        result = subprocess.run(
+            [sys.executable, str(Path(__file__).with_name("_population_download.py"))],
+            input=json.dumps(
+                {
+                    "base_url": _DATA_URL,
+                    "directory": str(directory),
+                    "paths": paths,
+                    "timeout": remaining,
+                }
+            ),
+            text=True,
+            capture_output=True,
+            timeout=remaining,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise PopulationLoadTimeoutError(population_name, remaining) from exc
+    if result.returncode:
+        if not result.stdout:
+            raise RuntimeError(f"Population downloader exited with status {result.returncode}")
+        error = json.loads(result.stdout)
+        if error["type"] == "TimeoutError":
+            raise PopulationLoadTimeoutError(population_name, remaining)
+        raise RuntimeError(f"Failed to download population data: {error['message']}")
+
+
+@functools.lru_cache(maxsize=50)
+def _load_population_cached_inner(
+    name: str,
+    contacts_source: str,
+    layers_key: tuple[str, ...],
+    mapping_key: tuple[tuple[str, tuple[str, ...]], ...] | None,
+) -> _CachedPopulation:
+    """Share one bounded cache across population APIs, warm-up and simulations."""
+    for component in (name, contacts_source, *layers_key):
+        if component in ("", ".", "..") or any(c in component for c in ("/", "\\", "\0")):
+            raise ValueError(f"Invalid population data path component: {component!r}")
+    if contacts_source not in ("prem_2017", "prem_2021", "mistry_2021", "litvinova_2025"):
+        raise ValueError(f"Unsupported contact source: {contacts_source}")
+    locations = get_locations_df()
+    if name not in locations["location"].values:
+        raise ValueError(f"Location '{name}' not found in the list of supported locations")
+    paths = [f"data/{name}/demographic/age_distribution.csv"]
+    paths.extend(
+        f"data/{name}/contact_matrices/{contacts_source}/contacts_matrix_{layer}.csv"
+        for layer in layers_key
+    )
+    with TemporaryDirectory(prefix="epydemix-population-") as directory:
+        root = Path(directory)
+        locations.to_csv(root / "locations.csv", index=False)
+        _download_files(root, paths, name)
+        population = load_epydemix_population(
+            population_name=name,
+            contacts_source=contacts_source,
+            path_to_data=directory,
+            layers=list(layers_key),
+            age_group_mapping=(
+                {k: list(v) for k, v in mapping_key} if mapping_key is not None else None
+            ),
+        )
+    cached = _CachedPopulation(population)
+    _cached_populations[id(cached)] = cached
+    return cached
 
 
 def _resolve_contacts_source(name: str, contacts_source: str | None) -> str:
@@ -218,36 +294,8 @@ def _resolve_contacts_source(name: str, contacts_source: str | None) -> str:
     return "mistry_2021"  # fallback default
 
 
-@functools.lru_cache(maxsize=50)
-def _load_population_for_sim(
-    name: str,
-    contacts_source: str,
-    layers_key: tuple[str, ...],
-    mapping_key: tuple[tuple[str, tuple[str, ...]], ...] | None,
-) -> Population:
-    """Cached builtin-population load for the simulation path.
-
-    All four arguments must be hashable and canonical so equivalent requests
-    hit the same cache entry: ``contacts_source`` resolved (never None),
-    ``layers`` sorted, ``age_group_mapping`` flattened to sorted tuples. The
-    underlying ``load_epydemix_population`` fetches ~6-7 CSVs over HTTPS with no
-    cache of its own, so this collapses repeated identical loads (~0.6s each)
-    to a single fetch.
-
-    Returns the shared cached object; callers must copy before handing it to a
-    model (see ``setup_population``).
-    """
-    mapping = {k: list(v) for k, v in mapping_key} if mapping_key is not None else None
-    return load_epydemix_population(
-        population_name=name,
-        contacts_source=contacts_source,
-        layers=list(layers_key),
-        age_group_mapping=mapping,
-    )
-
-
-def setup_population(model: EpiModel, config: PopulationConfig) -> None:
-    """Load and set population for the model.
+def get_simulation_population(config: PopulationConfig, timeout: float | None = None) -> Population:
+    """Return a population owned by this simulation.
 
     For builtin populations, loads from the epydemix data repository.
     For custom populations, builds a Population in-memory from the inline
@@ -255,8 +303,6 @@ def setup_population(model: EpiModel, config: PopulationConfig) -> None:
 
     Parameters
     ----------
-    model : EpiModel
-        EpiModel to configure with population data.
     config : BuiltinPopulationConfig or CustomPopulationConfig
         Population configuration. The discriminator selects the branch.
     """
@@ -271,33 +317,31 @@ def setup_population(model: EpiModel, config: PopulationConfig) -> None:
                 contact_matrix=np.array(matrix, dtype=float),
                 layer_name=layer_name,
             )
-        model.set_population(population)
-        return
+        return population
 
-    # Route the builtin load through a cache keyed on the canonicalized args.
-    # Resolving contacts_source collapses None and its default to one entry;
-    # sorting layers makes order irrelevant (the resulting contact_matrices
-    # dict is order-independent). The cache hands back a shared object, so we
-    # deepcopy before binding it to this request's model to rule out any
-    # cross-request mutation (cheap: a handful of small arrays).
-    resolved_source = _resolve_contacts_source(config.name, config.contacts_source)
-    layers_key = tuple(sorted(config.layers or DEFAULT_LAYERS))
-    mapping = config.age_group_mapping
-    mapping_key = (
-        tuple(sorted((k, tuple(v)) for k, v in mapping.items()))
-        if mapping is not None
-        else None
+    population = _load_population_cached(
+        config.name,
+        config.contacts_source,
+        timeout=timeout,
+        layers=config.layers,
+        age_group_mapping=config.age_group_mapping,
     )
-    population = _load_population_for_sim(
-        config.name, resolved_source, layers_key, mapping_key
-    )
-    model.set_population(copy.deepcopy(population))
+    # Models mutate populations; each request owns its own arrays.
+    return copy.deepcopy(population)
+
+
+def setup_population(model: EpiModel, config: PopulationConfig) -> None:
+    """Bind an independently owned population to the model."""
+    model.set_population(get_simulation_population(config))
 
 
 def _load_population_cached(
     name: str,
     contacts_source: str | None = None,
     timeout: float | None = None,
+    *,
+    layers: list[str] | None = None,
+    age_group_mapping: dict[str, list[str]] | None = None,
 ) -> Population:
     """Load a population with caching and optional timeout.
 
@@ -324,26 +368,29 @@ def _load_population_cached(
     PopulationLoadTimeoutError
         If loading exceeds the timeout.
     """
-    resolved_source = _resolve_contacts_source(name, contacts_source)
+    timeout = settings.population_load_timeout if timeout is None else timeout
+    token = _load_deadline.set(time.monotonic() + timeout)
+    try:
+        resolved_source = _resolve_contacts_source(name, contacts_source)
+        # Age order defines the meaning of positional parameters and initial conditions.
+        mapping_key = (
+            tuple((key, tuple(values)) for key, values in age_group_mapping.items())
+            if age_group_mapping is not None
+            else None
+        )
+        pop = _load_population_cached_inner(
+            name, resolved_source, tuple(sorted(layers or DEFAULT_LAYERS)), mapping_key
+        ).population
+    except PopulationLoadTimeoutError as exc:
+        raise PopulationLoadTimeoutError(name, timeout) from exc
+    finally:
+        _load_deadline.reset(token)
 
-    if timeout is None:
-        timeout = settings.population_load_timeout
-
-    # Use ThreadPoolExecutor to enforce timeout on the load
-    # Note: If already cached, the load is instant so timeout won't trigger
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(_load_population_cached_inner, name, resolved_source)
-        try:
-            pop = future.result(timeout=timeout)
-        except FuturesTimeoutError:
-            future.cancel()
-            raise PopulationLoadTimeoutError(name, timeout)
-
-    # Update metadata cache. Preserve any precomputed fields (e.g. age_distribution).
-    entry = _population_metadata_cache.setdefault(name, {})
-    entry["total_population"] = int(pop.total_population)
-    entry["age_groups"] = {str(label): int(count) for label, count in zip(pop.Nk_names, pop.Nk)}
-
+    # Only default demographic aggregation belongs in the public summary metadata.
+    if age_group_mapping is None:
+        entry = _population_metadata_cache.setdefault(name, {})
+        entry["total_population"] = int(pop.total_population)
+        entry["age_groups"] = {str(label): int(count) for label, count in zip(pop.Nk_names, pop.Nk)}
     return pop
 
 
@@ -560,5 +607,11 @@ def get_cache_info() -> dict:
         "misses": cache_info.misses,
         "maxsize": cache_info.maxsize,
         "currsize": cache_info.currsize,
-        "cached_populations": list(_population_metadata_cache.keys()),
+        "cached_populations": sorted(
+            {
+                cached.population.name
+                for reference in _cached_populations.valuerefs()
+                if (cached := reference()) is not None
+            }
+        ),
     }
