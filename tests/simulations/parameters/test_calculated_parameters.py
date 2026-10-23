@@ -938,19 +938,27 @@ def test_source_override_propagates_through_calc_param(client):
         (
             "SEIR",
             {"infectious_period": 7.0, "recovery_rate": 0.2},
-            [("infectious_period", "recovery_rate")],
+            [{"parameter": "infectious_period", "overridden_by": "recovery_rate"}],
         ),
-        ("SEIR", {"R0": 2.0, "transmission_rate": 0.3}, [("R0", "transmission_rate")]),
+        (
+            "SEIR",
+            {"R0": 2.0, "transmission_rate": 0.3},
+            [{"parameter": "R0", "overridden_by": "transmission_rate"}],
+        ),
         (
             "SEIR",
             {"incubation_period": 3.0, "incubation_rate": 0.5},
-            [("incubation_period", "incubation_rate")],
+            [{"parameter": "incubation_period", "overridden_by": "incubation_rate"}],
         ),
-        ("SIR", {"R0": "2 * 1.25", "transmission_rate": 0.3}, [("R0", "transmission_rate")]),
+        (
+            "SIR",
+            {"R0": "2 * 1.25", "transmission_rate": 0.3},
+            [{"parameter": "R0", "overridden_by": "transmission_rate"}],
+        ),
         (
             "V-SEIR",
             {"immunity_duration": 365.0, "waning_rate": 0.01},
-            [("immunity_duration", "waning_rate")],
+            [{"parameter": "immunity_duration", "overridden_by": "waning_rate"}],
         ),
         (
             "V-SEIHR",
@@ -960,28 +968,31 @@ def test_source_override_propagates_through_calc_param(client):
                 "hosp_duration": 5.0,
                 "hosp_recovery_rate": 0.25,
             },
-            [("hosp_duration", "hosp_recovery_rate"), ("R0", "transmission_rate")],
+            [
+                {"parameter": "hosp_duration", "overridden_by": "hosp_recovery_rate"},
+                {"parameter": "R0", "overridden_by": "transmission_rate"},
+            ],
         ),
         # Derived as an expression that does not use the source.
         (
             "SEIR",
             {"recovery_rate": "0.2", "infectious_period": 7.0},
-            [("infectious_period", "recovery_rate")],
+            [{"parameter": "infectious_period", "overridden_by": "recovery_rate"}],
         ),
         (
             "SEIR",
             {"recovery_rate": "0.2", "infectious_period": "3 + 4"},
-            [("infectious_period", "recovery_rate")],
+            [{"parameter": "infectious_period", "overridden_by": "recovery_rate"}],
         ),
         (
             "SIR",
             {"transmission_rate": "0.1 * recovery_rate", "R0": 2.0, "infectious_period": 7.0},
-            [("R0", "transmission_rate")],
+            [{"parameter": "R0", "overridden_by": "transmission_rate"}],
         ),
         (
             "V-SEIHR",
             {"recovery_rate": "0.4", "infectious_period": 2.5},
-            [("infectious_period", "recovery_rate")],
+            [{"parameter": "infectious_period", "overridden_by": "recovery_rate"}],
         ),
     ],
 )
@@ -990,7 +1001,10 @@ def test_parameter_overridden_warning(client, preset, parameters, expected):
     response = client.post("/api/v1/simulations", json=_preset_request(preset, parameters))
     assert response.status_code == 200, response.text
     warnings = response.json()["warnings"]
-    assert sorted((w["parameter"], w["overridden_by"]) for w in warnings) == sorted(expected)
+    actual = [{"parameter": w["parameter"], "overridden_by": w["overridden_by"]} for w in warnings]
+    assert sorted(actual, key=lambda w: w["parameter"]) == sorted(
+        expected, key=lambda w: w["parameter"]
+    )
     for w in warnings:
         assert w["code"] == "parameter_overridden"
         assert w["message"] == (
