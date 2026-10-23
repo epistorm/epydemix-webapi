@@ -823,7 +823,9 @@ def test_basic_preset_explicit_R0_and_infectious_period(client, preset):
     assert rates["transmission_rate"] == pytest.approx(1.5 * 0.1 / eigenvalue, rel=1e-9)
 
     rates = _get_effective_rates(client, preset, population, {"infectious_period": 5.0})
+    # recovery_rate = 1 / infectious_period = 1 / 5.0 = 0.2.
     assert rates["recovery_rate"] == pytest.approx(0.2, abs=1e-12)
+    # 2.5 is the default R0 for the SIR, SEIR, and SIS presets.
     assert rates["transmission_rate"] == pytest.approx(2.5 * 0.2 / eigenvalue, rel=1e-9)
 
 
