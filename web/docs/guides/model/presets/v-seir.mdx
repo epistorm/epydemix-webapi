@@ -1,0 +1,254 @@
+---
+sidebar_position: 5
+---
+
+import EndpointSelector from '@site/src/components/EndpointSelector';
+import CurlBlock from '@site/src/components/CurlBlock';
+
+# V-SEIR
+
+<EndpointSelector />
+
+Vaccinated SEIR: a Susceptible-Exposed-Infected-Recovered model with a parallel **vaccinated branch**. Every compartment has a `_vax` twin, and vaccine efficacy reduces susceptibility (`VE_S`). Pair it with the [`vaccination` block](../../vaccination/overview.mdx) to set vaccination rollout schedule, which adds a flow from `Susceptible` into `Susceptible_vax` compartments over a campaign window.
+
+Use V-SEIR instead of [V-SEIHR](./v-seihr.mdx) when you do not need to track hospitalizations as their own compartment, e.g. when you only care about infection dynamics and the impact of vaccination on susceptibility.
+
+## Compartments
+
+The preset declares eight compartments: four clinical states, each with an unvaccinated and a vaccinated version.
+
+- **Susceptible** / **Susceptible_vax**: can be infected; the `_vax` branch is exposed at a reduced rate.
+- **Exposed** / **Exposed_vax**: infected but not yet infectious.
+- **Infected** / **Infected_vax**: currently infectious. Vaccinated infectious individuals transmit at the *same* per-contact rate as unvaccinated; the reduction sits on susceptibility, not transmissibility.
+- **Recovered** / **Recovered_vax**: recovered and (transiently) immune; waning, if enabled, returns them to the matching susceptible compartment.
+
+## Transitions
+
+The unvaccinated and vaccinated branches mirror each other. Vaccinated susceptibles are exposed by both `Infected` and `Infected_vax` (same per-contact rate `transmission_rate`, attenuated by `(1 - VE_S)`).
+
+| From | To | Kind | Rate |
+|---|---|---|---|
+| `Susceptible` | `Exposed` | mediated by `Infected` and `Infected_vax` | `transmission_rate` |
+| `Exposed` | `Infected` | spontaneous | `incubation_rate` |
+| `Infected` | `Recovered` | spontaneous | `recovery_rate` |
+| `Recovered` | `Susceptible` | spontaneous | `waning_rate` (0 by default) |
+| `Susceptible_vax` | `Exposed_vax` | mediated by `Infected` and `Infected_vax` | `transmission_rate_vax = (1 - VE_S) * transmission_rate` |
+| `Exposed_vax` | `Infected_vax` | spontaneous | `incubation_rate` |
+| `Infected_vax` | `Recovered_vax` | spontaneous | `recovery_rate` |
+| `Recovered_vax` | `Susceptible_vax` | spontaneous | `waning_rate` |
+
+The `Susceptible → Susceptible_vax` flow is not part of the preset itself; it is added when the request supplies a [`vaccination`](../../vaccination/overview.mdx) block. Without that block the vaccinated branch stays at zero and the model behaves like plain SEIR.
+
+<details className="quiet">
+<summary>Equivalent ODE form</summary>
+
+For each age group $i$, the deterministic mean-field counterpart of the transitions above is:
+
+**Unvaccinated branch**
+
+$$
+\begin{aligned}
+\frac{dS_i}{dt} &= -\lambda_i S_i - \nu_i S_i + \omega R_i \\[4pt]
+\frac{dE_i}{dt} &= \lambda_i S_i - \sigma E_i \\[4pt]
+\frac{dI_i}{dt} &= \sigma E_i - \gamma I_i \\[4pt]
+\frac{dR_i}{dt} &= \gamma I_i - \omega R_i
+\end{aligned}
+$$
+
+**Vaccinated branch**
+
+$$
+\begin{aligned}
+\frac{dS^v_i}{dt} &= \nu_i S_i - (1 - \text{VE}_S) \, \lambda_i S^v_i + \omega R^v_i \\[4pt]
+\frac{dE^v_i}{dt} &= (1 - \text{VE}_S) \, \lambda_i S^v_i - \sigma E^v_i \\[4pt]
+\frac{dI^v_i}{dt} &= \sigma E^v_i - \gamma I^v_i \\[4pt]
+\frac{dR^v_i}{dt} &= \gamma I^v_i - \omega R^v_i
+\end{aligned}
+$$
+
+Age groups couple through the contact matrix in the force of infection:
+
+$$
+\lambda_i(t) = \beta \sum_j C_{ij} \, \frac{I_j(t) + I^v_j(t)}{N_j}
+$$
+
+
+| Symbol | Shape | Parameter |
+|---|---|---|
+| $\lambda_i$ | per-age | force of infection (depends on $\beta$ = `transmission_rate` and contact matrix $C_{ij}$; see [Vaccine efficacy](#vaccine-efficacy)) |
+| $\sigma$ | scalar | `incubation_rate` |
+| $\gamma$ | scalar | `recovery_rate` |
+| $\omega$ | scalar | `waning_rate` (zero unless `immunity_duration` is passed) |
+| $\nu_i$ | per-age | per-day vaccination rate from the `vaccination` block; zero outside any campaign window and outside that campaign's `target_age_groups` |
+| $\text{VE}_S$ | scalar | `VE_S` |
+
+The simulator is fully stochastic: at each step every source compartment is updated by a competing-risks multinomial draw over its out-edges, with leave probability $1 - e^{-H_i\,dt}$ and destination weights proportional to the per-edge rates. The expected dynamics match the mean-field equations above.
+
+</details>
+
+## Vaccine efficacy
+
+The preset exposes one efficacy parameter, unitless and in $[0, 1]$.
+
+**`VE_S`** (efficacy against susceptibility) lowers the force of infection on vaccinated susceptibles, reducing their per-exposure probability of getting infected. A separate efficacy against *infectiousness* (`VE_I`) would instead reduce transmission *from* vaccinated infected; that is not modeled here.
+
+$$
+\lambda^{\text{vax}}_i(t) = (1 - \mathrm{VE_S}) \cdot \lambda_i(t),
+$$
+
+where
+
+$$
+\lambda_i(t) = \beta \sum_j C_{ij}\,\frac{I_j(t) + I_j^{\text{vax}}(t)}{N_j}
+$$
+
+is the standard age-structured force of infection, $\beta$ is `transmission_rate`, and $C_{ij}$ is the contact matrix from the resolved population. Vaccinated infectious individuals transmit at the **same** per-contact rate as unvaccinated; the reduction sits entirely on the susceptibility side. Internally, the preset stores this as the calculated parameter `transmission_rate_vax = (1 - VE_S) * transmission_rate`.
+
+Limit cases worth remembering:
+
+- $\mathrm{VE_S} = 1$: sterilizing immunity. The vaccinated branch has zero force of infection and never sees breakthrough infections.
+- $\mathrm{VE_S} = 0$: no protection against susceptibility. The vaccinated branch's transmission dynamics collapse onto the unvaccinated branch's.
+
+If you also need to model vaccine efficacy against hospitalization (`VE_H`), use [V-SEIHR](./v-seihr.mdx) instead.
+
+## Parameters
+
+Some parameters can be provided in multiple forms. For example, you can provide `infectious_period` instead of `recovery_rate` and it gets automatically converted. If both forms are supplied, the rate form is used and the response includes a [warning](../../warnings.mdx). See [Preset conversions and precedence](../parameters/overview.mdx#preset-conversions-and-precedence) for details.
+
+| Parameter | Status | Default | Description |
+|---|---|---|---|
+| `R0` | Default | `2.5` | Basic reproduction number. |
+| `transmission_rate` | Alternative to `R0` | derived | $\beta$. Default: `R0 * recovery_rate / CONTACT_MATRIX_EIGENVALUE_ALL`. |
+| `incubation_period` | Default | `3.0` (days) | Days from exposure to infectiousness. |
+| `incubation_rate` | Alternative to `incubation_period` | derived | E → I rate. Default: `1 / incubation_period`. |
+| `infectious_period` | Default | `2.5` (days) | Days infectious. |
+| `recovery_rate` | Alternative to `infectious_period` | derived | I → R rate. Default: `1 / infectious_period`. |
+| `waning_rate` | Default | `0.0` (off) | R → S rate. Waning is off by default. |
+| `immunity_duration` | Alternative to `waning_rate` | unset | Days from R → S. Pass to enable waning via `waning_rate = 1 / immunity_duration`. |
+| `VE_S` | Default | `0.7` | Vaccine efficacy against susceptibility, in $[0, 1]$. Lowers the force of infection on vaccinated susceptibles. `0` = no protection, `1` = sterilizing. |
+
+The derived parameter `transmission_rate_vax` is computed automatically from the inputs above and surfaces in `results.parameters` when `output.include_parameters` is set. You can override it by passing a matching name in `parameters` (user-supplied calc-params win on collision).
+
+## Initial conditions
+
+If the request omits `initial_conditions`, V-SEIR seeds ~0.05% of each age group split evenly between `Exposed` and `Infected` (~0.025% each); the rest goes to `Susceptible`, and the `_vax` branch starts at zero.
+
+Override the default by passing an explicit `initial_conditions` block, e.g.:
+
+```json5
+"initial_conditions": {
+  "method": "percentage",
+  "initial_percentages": {"Exposed": 0.025, "Infected": 0.025}
+}
+```
+
+See [Initial Conditions](../../initial-conditions.mdx) for other seeding options (absolute counts, multi-compartment seeding, etc.).
+
+## Examples
+
+### With a vaccination campaign
+
+V-SEIR with a flat-count vaccination campaign over a three-month window. `VE_S` drives the protection on the vaccinated branch. See the [Campaigns page](../../vaccination/campaigns.mdx) for the full set of rollout options.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "V-SEIR",
+      "parameters": {
+        "R0": 2.5,
+        "incubation_period": 3.0,
+        "infectious_period": 2.5,
+        "VE_S": 0.7
+      }
+    },
+    "population": {"name": "United_States"},
+    "simulation": {"start_date": "2025-01-01", "end_date": "2025-06-30", "Nsim": 10},
+    "initial_conditions": {
+      "method": "percentage",
+      "initial_percentages": {"Infected": 0.1}
+    },
+    "vaccination": {
+      "campaigns": [
+        {
+          "start_date": "2025-02-01",
+          "end_date": "2025-04-30",
+          "rollout": {"type": "flat_count", "daily_doses": 100000}
+        }
+      ]
+    }
+  }'`}
+</CurlBlock>
+
+### Without vaccination
+
+Drop the `vaccination` block to get the no-intervention baseline (no vaccination rollout). The vaccinated branch stays at zero for the whole run and the model collapses to plain SEIR (compartments and rates on the unvaccinated branch only). Useful to compare against the vaccinated case above.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "V-SEIR",
+      "parameters": {
+        "R0": 2.5,
+        "incubation_period": 3.0,
+        "infectious_period": 2.5
+      }
+    },
+    "population": {"name": "United_States"},
+    "simulation": {"start_date": "2025-01-01", "end_date": "2025-06-30", "Nsim": 10},
+    "initial_conditions": {
+      "method": "percentage",
+      "initial_percentages": {"Infected": 0.1}
+    }
+  }'`}
+</CurlBlock>
+
+`VE_S` is omitted here because it only matters once any of the population is in the vaccinated branch; with no campaign and no seeded `Susceptible_vax`, its value does not affect the trajectory.
+
+### With seasonality and a vaccination campaign
+
+Apply seasonality to `transmission_rate` (peak January 15, trough July 15, per the Northern Hemisphere defaults in [Balcan *et al.*, 2010](https://doi.org/10.1016/j.jocs.2010.07.002)) and run a pre-peak vaccination campaign in autumn so the rollout finishes just before the winter wave hits. Because `transmission_rate` is itself derived from `R0`, the seasonal multiplier is applied on top of the evaluated $\beta$ at each step. See [parameter transforms](../parameters/transformations.mdx) for the full transform reference.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "V-SEIR",
+      "parameters": {
+        "R0": 2.5,
+        "incubation_period": 3.0,
+        "infectious_period": 2.5,
+        "VE_S": 0.7
+      }
+    },
+    "population": {"name": "United_States"},
+    "simulation": {"start_date": "2025-08-01", "end_date": "2026-07-31", "Nsim": 10},
+    "initial_conditions": {
+      "method": "percentage",
+      "initial_percentages": {"Infected": 0.1}
+    },
+    "parameter_transforms": [
+      {
+        "target_parameter": "transmission_rate",
+        "method": "balcan",
+        "max_date": "2026-01-15",
+        "min_date": "2026-07-15",
+        "min_value": 0.85
+      }
+    ],
+    "vaccination": {
+      "campaigns": [
+        {
+          "start_date": "2025-10-15",
+          "end_date": "2025-12-31",
+          "rollout": {"type": "flat_count", "daily_doses": 100000}
+        }
+      ]
+    },
+    "output": {"include_parameters": true}
+  }'`}
+</CurlBlock>

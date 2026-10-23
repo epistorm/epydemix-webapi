@@ -3,5 +3,40 @@
   "installCommand": "bun install",
   "redirects": [
     { "source": "/", "destination": "/docs", "permanent": true }
+  ],
+  "rewrites": [
+    {
+      "source": "/.well-known/api-catalog",
+      "destination": "/.well-known/api-catalog.json"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/.well-known/api-catalog",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/linkset+json"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)\\.md",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/markdown; charset=utf-8"
+        }
+      ]
+    },
+    {
+      "source": "/(docs.*)?",
+      "headers": [
+        {
+          "key": "Link",
+          "value": "</.well-known/api-catalog>; rel=\"api-catalog\"; type=\"application/linkset+json\", </openapi.json>; rel=\"service-desc\"; type=\"application/json\", <https://epyscenario-api.isi.it/api/v1/health>; rel=\"status\"; type=\"application/json\", </llms.txt>; rel=\"https://llmstxt.org/\"; type=\"text/markdown\", </llms-full.txt>; rel=\"https://llmstxt.org/full\"; type=\"text/markdown\", <https://epyscenario-api.isi.it/mcp>; rel=\"mcp-server\", <https://epyscenario-api.isi.it/.well-known/mcp/server-card.json>; rel=\"mcp-server-card\"; type=\"application/json\""
+        }
+      ]
+    }
   ]
 }

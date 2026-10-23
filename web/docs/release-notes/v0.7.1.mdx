@@ -1,0 +1,69 @@
+---
+title: v0.7.1
+date: 2026-05-19
+summary: |
+  - New interactive **`/playground`** page with a request editor and response viewer with plots
+  - V-SEIHR now ships a default initial condition
+  - Bug fixes in V-SEIHR response metadata
+  - Documentation improvements: initial conditions page, parameterization options, UI refinements
+  - Expanded test coverage: SIR dynamics, parameter transforms, initial conditions
+---
+
+import ReleaseHeader from '@site/src/components/ReleaseHeader';
+
+# v0.7.1
+
+<ReleaseHeader />
+
+## Overview
+
+- New interactive **`/playground`** page with a request editor and response viewer with plots
+- V-SEIHR now ships a default initial condition
+- Bug fixes in V-SEIHR response metadata
+  - Peak summaries no longer leak `vax_*` keys into unvaccinated compartments age groups
+  - Vaccination flows are now echoed back in the response metadata 
+- Documentation improvements: initial conditions page, parameterization options, UI refinements
+- Expanded test coverage: SIR dynamics (R0 monotonicity, subcritical dieout, ODE match, seasonality suppression), value-level assertions on parameter transforms, and a new unit-test suite for initial conditions
+
+## Simulations
+
+`POST /api/v1/simulations`
+
+### V-SEIHR default initial conditions
+
+If you omit `initial_conditions` on a `V-SEIHR` request, the API now seeds ~0.05% of each age group as `Infected` and puts the rest in `Susceptible`. The `_vax` branch starts at zero. See the new [Initial Conditions](/docs/guides/initial-conditions) page.
+
+### Resolved vaccination flows in metadata
+
+`POST /simulations` with a `V-SEIHR` request and a `vaccination` block but no explicit `vaccination.flows` now echoes the resolved default flow back in the response:
+
+```json
+"metadata": {
+  "vaccination": {
+    "flows": [{ "source": "Susceptible", "target": "Susceptible_vax" }],
+    "campaigns": [ /* ... */ ]
+  }
+}
+```
+
+Previously `flows` stayed `null` in the response even though the simulator had defaulted it internally.
+
+### Summary peaks no longer leak `_vax` keys
+
+For V-SEIHR responses, `results.summary.peaks.Susceptible` used to contain age-group-shaped entries like `vax_0-4`, `vax_total`, etc. This bug has been fixed so that only age groups corresponding to the unvaccinated branch are included in the summary peaks.
+
+## Playground
+
+A new page for trying simulations interactively is now available at [`/playground`](/playground):
+
+- Request JSON editor: Write the request body directly in JSON or pick from one of the provided templates
+- Response viewer: After you run the simulation, you can see selected compartments/transitions/parameters plotted over time, with the full JSON response available in a separate tab.
+
+
+## Documentation
+
+- Added information about initial conditions
+  - New [**Initial Conditions**](/docs/guides/initial-conditions) page covering the `percentage` (default) and `absolute` methods, when to pick each, and what the fallback behavior is for omitted blocks
+  - [Custom Models](/docs/guides/model/custom-models) example now includes an explicit `initial_conditions` block and notes the lack of a built-in default for custom presets
+- All model preset pages document `R0` and period-form parameters as alternatives to the rate forms ([SIR](/docs/guides/model/presets/sir), [SEIR](/docs/guides/model/presets/seir), [SIS](/docs/guides/model/presets/sis)).
+- Documentation refinement: the sidebar can be collapsed with a toggle button; frontend dependency updates

@@ -1,0 +1,224 @@
+---
+sidebar_position: 1
+---
+
+import EndpointSelector from '@site/src/components/EndpointSelector';
+import CurlBlock from '@site/src/components/CurlBlock';
+
+# Overview
+
+<EndpointSelector />
+
+Parameters are the named rate values referenced by your model's transitions. Every parameter used in a [preset](../presets/overview.mdx) or [custom model](../custom-models.mdx) transition must appear under `model.parameters`. Three value shapes are supported: scalar, age-varying, and calculated (expressions over other parameters).
+
+## Scalar parameters
+
+A single rate that applies uniformly to every age group. This is the default.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "SIR",
+      "parameters": {
+        "transmission_rate": 0.3,
+        "recovery_rate": 0.1
+      }
+    },
+    "population": { "name": "United_States" },
+    "simulation": {
+      "start_date": "2024-01-01",
+      "end_date": "2024-06-01",
+      "Nsim": 10
+    }
+  }'`}
+</CurlBlock>
+
+## Age-varying parameters
+
+A list of one rate per age group. The list length must match the number of age groups in the resolved population (after any `age_group_mapping` is applied).
+
+For example, with the 5-group mapping below, `transmission_rate = [0.35, 0.35, 0.30, 0.25, 0.20]` means the youngest two groups transmit at 0.35, the middle group at 0.30, and so on.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "SIR",
+      "parameters": {
+        "transmission_rate": [0.35, 0.35, 0.30, 0.25, 0.20],
+        "recovery_rate":     [0.10, 0.10, 0.10, 0.08, 0.06]
+      }
+    },
+    "population": {
+      "name": "United_States",
+      "contacts_source": "prem_2021",
+      "age_group_mapping": {
+        "0-4":   ["0-4"],
+        "5-17":  ["5-9", "10-14", "15-19"],
+        "18-49": ["20-24", "25-29", "30-34", "35-39", "40-44", "45-49"],
+        "50-64": ["50-54", "55-59", "60-64"],
+        "65+":   ["65-69", "70-74", "75+"]
+      }
+    },
+    "simulation": {
+      "start_date": "2024-01-01",
+      "end_date": "2024-12-31",
+      "Nsim": 10
+    }
+  }'`}
+</CurlBlock>
+
+You can mix scalar and age-varying values across parameters. For example, `transmission_rate` can be age-varying while `recovery_rate` stays scalar.
+
+## Calculated parameters
+
+A string value in `parameters` is treated as an arithmetic expression over the **other** parameters. The expression is evaluated at simulation build time and the result is stored under that name like any other parameter. Useful for branching outflow rates (e.g. `(1 - p_h) * gamma`) and for deriving one parameter from another (e.g. `transmission_rate` from a target $R_0$).
+
+```json
+{
+  "parameters": {
+    "p_h": 0.05,
+    "gamma": 0.1,
+    "alpha": 0.2,
+    "recovery_rate": "(1 - p_h) * gamma",
+    "hospitalization_rate": "p_h * alpha"
+  }
+}
+```
+
+Source-parameter shapes propagate via numpy broadcasting. If `p_h` is age-varying (`[0.05, 0.10, 0.15, 0.20, 0.25]`), then `(1 - p_h) * gamma` is automatically age-varying too. If `gamma` is also seasonally scaled via [`parameter_transforms`](./transformations.mdx), the calculated parameter inherits the time-variation as well — calculated parameters evaluate **after** transforms.
+
+### Allowed expression syntax
+
+Strict arithmetic only:
+
+- Binary operators: `+`, `-`, `*`, `/`, `//`, `**`, `%`
+- Unary operators: `+`, `-`
+- Parentheses for grouping
+- Numeric literals
+- Names of other parameters (or reserved names below)
+
+Function calls, attribute access, subscripts, comparisons, and conditionals are rejected with a `422` error. This keeps expressions safe to evaluate and easy to read.
+
+### Transforms on calculated parameters
+
+A calculated parameter **can** be the `target_parameter` of a [`parameter_transform`](./transformations.mdx). The transform layers on top of the evaluated expression: source-targeted transforms run first, then expressions are evaluated (so the sources' post-transform values feed in), then any transform targeting a calc-param applies to the result. Use this when you want to modulate a derived parameter directly without changing every source it depends on, e.g. a flat scale on `transmission_rate_vax` while a `balcan` envelope modulates `transmission_rate`.
+
+### Restrictions
+
+- Circular dependencies among expressions (`a = "b + 1", b = "a + 1"`) are rejected with a `422`.
+- A reference to an undefined name is rejected with a `422` naming the missing parameter.
+
+### Value checks
+
+These checks run before the simulation starts and return a `422`:
+
+- A period converted to a rate (`infectious_period`, `incubation_period`, `hosp_duration`, `immunity_duration`) must be greater than 0.
+- After expressions and [transforms](./transformations.mdx) are evaluated, every parameter used as a transition rate must be finite and non-negative. Rates above 1 are allowed.
+- Preset probabilities and proportions (`VE_S`, `VE_H`, `hosp_proportion`) must stay between 0 and 1 after evaluation.
+
+Other parameters are not constrained, so helper values used only inside expressions may be negative.
+
+### Reserved names
+
+Expressions can also reference SCREAMING_SNAKE_CASE constants derived from the model state. User parameters cannot share these names.
+
+| Name | Value |
+|---|---|
+| `CONTACT_MATRIX_EIGENVALUE_ALL` | Dominant eigenvalue (largest by magnitude) of the sum of all contact-matrix layers in the resolved population. |
+
+The most common use is calibrating `transmission_rate` from a target $R_0$:
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "SIR",
+      "parameters": {
+        "R0": 1.5,
+        "gamma": 0.1,
+        "recovery_rate": "gamma",
+        "transmission_rate": "R0 * gamma / CONTACT_MATRIX_EIGENVALUE_ALL"
+      }
+    },
+    "population": { "name": "United_States" },
+    "simulation": {
+      "start_date": "2024-01-01",
+      "end_date": "2024-06-01",
+      "Nsim": 10
+    }
+  }'`}
+</CurlBlock>
+
+Reserved names exist only in the expression namespace; they are not stored on the model and so do not appear under `results.parameters`.
+
+## Preset conversions and precedence
+
+Presets accept some parameters in a friendlier form and convert them to the rate the transitions use:
+
+- Period to rate: `infectious_period` becomes `recovery_rate = 1 / infectious_period`. The same applies to `incubation_period`, `hosp_duration`, and `immunity_duration` on presets that define them.
+- $R_0$ to $\beta$: `R0` becomes `transmission_rate = R0 * recovery_rate / CONTACT_MATRIX_EIGENVALUE_ALL`.
+
+Each preset's Parameters table lists the conversions it accepts. Custom models have no implicit conversions; write the expression yourself as a [calculated parameter](#calculated-parameters).
+
+If you pass both a source and the rate it converts to, the rate you passed is used and the conversion is skipped. The request still succeeds, and the response includes a [`parameter_overridden` warning](../../warnings.mdx) for each ignored source.
+
+| `model.parameters` | Used | Ignored | Warning |
+|---|---|---|---|
+| `{"infectious_period": 7}` | `recovery_rate = 1/7` | none | none |
+| `{"recovery_rate": 0.2}` | `recovery_rate = 0.2` | none | none |
+| `{"infectious_period": 7, "recovery_rate": 0.2}` | `recovery_rate = 0.2` | `infectious_period` | `parameter_overridden` |
+| `{"R0": 2.0, "transmission_rate": 0.3}` | `transmission_rate = 0.3` | `R0` | `parameter_overridden` |
+| `{"infectious_period": 7, "recovery_rate": "0.2"}` | `recovery_rate = 0.2` | `infectious_period` | `parameter_overridden` |
+| `{"infectious_period": 7, "recovery_rate": "1 / infectious_period"}` | `recovery_rate = 1/7` | none | none |
+
+A few details:
+
+- Only sources you pass count as a conflict. On a preset whose defaults include a source (for example `R0` on [V-SEIR](../presets/v-seir.mdx)), passing `transmission_rate` replaces the default without a warning.
+- A source passed as an expression (`"R0": "2 * 1.25"`) counts as passed, so the same rules apply. The expression itself is still evaluated, so other expressions can reference it.
+- A rate passed as an expression is used as written. It warns only when the expression does not use the source, either directly or through other calculated parameters: `"recovery_rate": "gamma"` with `"gamma": "1 / infectious_period"` counts as using `infectious_period`.
+- Parameters the preset does not define are accepted without a warning. They can serve as helpers in [calculated parameters](#calculated-parameters), like `gamma` in the example above.
+
+To check the values that actually drove a run, see [Inspecting parameter values in the response](#inspecting-parameter-values-in-the-response).
+
+## Time-varying parameters
+
+To make parameters change over the course of the simulation (seasonality, scaling windows, or absolute overrides), use [`parameter_transforms`](./transformations.mdx). Transforms compose on top of whatever you set here, so a base scalar or age-varying parameter still acts as the starting point.
+
+## Inspecting parameter values in the response
+
+Set `output.include_parameters: true` to surface the per-step effective parameter values in the response, after all transforms and overrides have been applied. Useful for plotting seasonality curves, sanity-checking overrides, or confirming what actually drove a simulation.
+
+```json
+"output": { "include_parameters": true }
+```
+
+Response shape under `results.parameters`:
+
+```json
+{
+  "dates": ["2024-01-01", "2024-01-02", "..."],
+  "data": {
+    "transmission_rate": {
+      "0-4":  [0.296, 0.297, "..."],
+      "5-19": [0.296, 0.297, "..."]
+    },
+    "recovery_rate": {
+      "0-4": [0.10, 0.10, "..."]
+    }
+  }
+}
+```
+
+- `dates` aligns 1-to-1 with `results.compartments.dates` and `results.transitions.dates`.
+- Each parameter entry is a `{age_group: [per-step values]}` map. Scalars and age-varying parameters are broadcast to the time axis; time-varying transforms (e.g. `balcan`) keep their per-step shape.
+- The block is **shared across stochastic runs** since parameters are deterministic inputs: one array per parameter regardless of `Nsim`.
+- Reserved names (e.g. `CONTACT_MATRIX_EIGENVALUE_ALL`) live only in the expression namespace and do not appear here.
+
+- A source ignored because you passed the rate as a number or list (see [Preset conversions and precedence](#preset-conversions-and-precedence)) does not appear here. Helper parameters do, even when no transition references them, so a name in this block was not necessarily used by a transition.
+
+Off by default (`results.parameters` is `null`) because the per-step, per-age arrays add computation and response size. See [Parameter Transforms › Inspecting the effective parameter values](./transformations.mdx#inspecting-the-effective-parameter-values) for a worked example.

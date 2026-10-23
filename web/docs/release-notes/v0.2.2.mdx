@@ -1,0 +1,103 @@
+---
+title: v0.2.2
+date: 2026-04-24
+summary: |
+  - Substantial API reshape from v0.1.1; includes breaking changes
+  - Simulation metadata is now nested into `model` / `population` / `simulation` sections that mirror the request shape
+  - `results.summary` is returned by default and nested by age group with a `quantiles` dict
+  - Population endpoints: `total_population` returned for every location, `age_groups` is now a flat `{label: count}` dict, new `age_distribution` field with raw single-year counts
+---
+
+import ReleaseHeader from '@site/src/components/ReleaseHeader';
+
+# v0.2.2
+
+<ReleaseHeader />
+
+## Overview
+- Substantial API reshape from v0.1.1; includes breaking changes
+- Simulation metadata is now nested into `model` / `population` / `simulation` sections that mirror the request shape
+- `results.summary` is returned by default and nested by age group with a `quantiles` dict
+- Population endpoints: `total_population` returned for every location, `age_groups` is now a flat `{label: count}` dict, new `age_distribution` field with raw single-year counts
+
+## Simulations
+
+`POST /v1/simulations`
+
+### Metadata
+
+The flat metadata block is now nested into sections that mirror the request:
+
+```json
+"metadata": {
+  "model":      { "preset": "...", "compartments": [...] },
+  "population": { "name": "...", "contacts_source": "...", "layers": [...],
+                  "total": ..., "age_groups": {"0-4": ..., ...},
+                  "age_group_mapping": null },
+  "simulation": { "start_date": "...", "end_date": "...",
+                  "Nsim": ..., "dt": ..., "seed": null,
+                  "resample_frequency": "D" }
+}
+```
+
+- Field names match the request exactly: `Nsim`, `dt`, `seed`, `contacts_source`, `layers`.
+- `population.age_groups` is a flat dict of per-group counts. `population.total` is the overall count.
+- `population.contacts_source` and `layers` show the resolved defaults, not `null`.
+- `age_group_mapping` is echoed when the request supplied one.
+
+### Summary
+
+`results.summary` is always returned by default and nested by age group. `peaks` and `totals` now carry a `quantiles` dict instead of `ci_95`:
+
+```json
+"summary": {
+  "peaks": {
+    "Infected": {
+      "total": { "quantiles": { "0.025": ..., "0.5": ..., "0.975": ... }, "peak_date": "..." },
+      "0-4":   { "quantiles": { ... }, "peak_date": "..." }
+    }
+  },
+  "totals": {
+    "Susceptible_to_Infected": {
+      "total": { "quantiles": { "0.025": ..., "0.5": ..., "0.975": ... } },
+      "0-4":   { "quantiles": { ... } }
+    }
+  }
+}
+```
+
+- Covers every compartment, every transition, every age group (plus `total`), every quantile listed in `output.quantiles`.
+- `output.quantiles` controls which quantiles appear in the summary (default seven: 0.025, 0.05, 0.25, 0.5, 0.75, 0.95, 0.975).
+- `output.age_groups` filters the summary age groups the same way it filters the trajectory data.
+- Pass `output.summary.peak_compartments: []` or `total_transitions: []` to explicitly skip that half.
+- `output.summary.peak_compartments` and `total_transitions` accept base compartment/transition names only. Age-suffixed strings like `"Infected_0-4"` are no longer recognized.
+
+## Populations
+
+`GET /v1/populations` and `GET /v1/populations/{name}`
+
+### List endpoint
+
+- `total_population` is now returned for every one of the 461 populations, not just the warm-cached subset.
+- `n_age_groups` field removed.
+
+### Detail endpoint
+
+- `age_groups` is a flat `{label: count}` dict (previously a list of `{name, population}` objects).
+- New `age_distribution` field: raw per-single-year counts from the upstream `age_distribution.csv` (e.g. 85 entries for `United_States`).
+
+## Migration
+
+| Before (0.1.x) | After (0.2.2) |
+| --- | --- |
+| `metadata.model_preset` | `metadata.model.preset` |
+| `metadata.population_name` | `metadata.population.name` |
+| `metadata.population_size` | `metadata.population.total` |
+| `metadata.n_simulations` | `metadata.simulation.Nsim` |
+| `metadata.start_date` / `end_date` / `dt` / `seed` | `metadata.simulation.*` |
+| `metadata.n_age_groups` | `len(metadata.population.age_groups)` |
+| `summary.peaks.Infected.median` | `summary.peaks.Infected.total.quantiles["0.5"]` |
+| `summary.peaks.Infected.ci_95[0]` / `[1]` | `summary.peaks.Infected.total.quantiles["0.025"]` / `["0.975"]` |
+| `summary.peaks.Infected.peak_date` | `summary.peaks.Infected.total.peak_date` |
+| `age_groups[i].name` / `age_groups[i].population` | `age_groups["0-4"]` |
+| Age-suffixed names in `peak_compartments` | base name + `output.age_groups` filter |

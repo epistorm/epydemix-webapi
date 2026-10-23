@@ -1,0 +1,145 @@
+---
+title: v0.3.0
+date: 2026-05-01
+summary: |
+  - Add parameter transformations: seasonality (`balcan`), `scale`, `override`. (Breaking: `parameter_overrides` moved into `parameter_transforms`)
+  - Support age-varying parameters
+  - Return effective parameter values in results
+  - Responses are now compressed in gzip
+  - Improve agent discoverability
+---
+
+import ReleaseHeader from '@site/src/components/ReleaseHeader';
+
+# v0.3.0
+
+<ReleaseHeader />
+
+## Overview
+- Support parameter transformations, including seasonality, scaling, and overrides
+- Support age-varying parameters
+- Return effective parameter values in results
+- Compress response in gzip
+- Improve agent discoverability
+- Breaking change: `parameter_overrides` is now part of `parameter_transforms`
+- Minor bug fixes
+  - Health endpoint returns epydemix version correctly
+
+## Simulations
+
+`POST /v1/simulations`
+
+### Seasonality (new)
+
+Add seasonality to model parameter, following Balcan D et al., *J. Comput. Sci.* 2010, eq. 25 ([DOI: 10.1016/j.jocs.2010.07.002](https://doi.org/10.1016/j.jocs.2010.07.002)).
+
+```json
+"parameter_transforms": [
+  {
+    "target_parameter": "transmission_rate",
+    "method": "balcan",
+    "max_date": "2024-01-15",
+    "min_date": "2024-07-15",
+    "max_value": 0.35,
+    "min_value": 0.15
+  }
+]
+```
+
+The transform is multiplicative on top of the existing parameter value: at every step, `transmission_rate` is multiplied by a sinusoidal factor that peaks at `max_value` on `max_date` and troughs at `min_value` on `min_date` (or half a period away if `min_date` is omitted, in which case the period defaults to 365 days).
+
+### Other parameter transforms
+
+The same `parameter_transforms` array also accepts two complementary methods that compose with `balcan`:
+
+- `scale`: constant multiplicative factor over a date window.
+- `override`: absolute replacement (scalar or per-age-group list) over a date window.
+
+```json
+"parameter_transforms": [
+  {
+    "target_parameter": "transmission_rate",
+    "method": "scale",
+    "start_date": "2024-03-01",
+    "end_date": "2024-04-01",
+    "factor": 0.5
+  },
+  {
+    "target_parameter": "recovery_rate",
+    "method": "override",
+    "start_date": "2024-06-01",
+    "end_date": "2024-07-01",
+    "value": [0.05, 0.05, 0.05, 0.04, 0.03]
+  }
+]
+```
+
+Multiple transforms on the same parameter compose: `balcan` and `scale` stack multiplicatively in the order listed; `override` always wins for its window.
+
+### Age-varying parameters
+
+`model.parameters` now accepts `list[float]` per parameter name, with one value per resolved age group:
+
+```json
+"model": {
+  "preset": "SIR",
+  "parameters": {
+    "transmission_rate": [0.35, 0.35, 0.30, 0.25, 0.20]
+  }
+}
+```
+
+The list length must equal the number of age groups in the resolved population (after any `age_group_mapping` is applied).
+
+### Effective parameters in results
+
+New `output.include_parameters: true` opts into a `results.parameters` block with the per-step effective parameter arrays after all transforms are applied. Override windows are baked in. Useful for plotting the actual driver of the simulation:
+
+```json
+"results": {
+  "parameters": {
+    "dates": ["2024-01-01", "..."],
+    "data": {
+      "transmission_rate": {
+        "0-4":   [0.300, 0.299, "..."],
+        "5-19":  [0.300, 0.299, "..."]
+      }
+    }
+  }
+}
+```
+
+Off by default to keep responses small.
+
+## Responses
+- All responses over ~1 KB are now gzip-compressed. Browsers and curl set `Accept-Encoding: gzip` by default.
+- Config-validation errors return 422 instead of 400, matching Pydantic's request-validation behavior.
+
+## Health endpoint
+
+`epydemix_version` in `GET /v1/health` now reads from installed package metadata instead of `epydemix.__version__` (which the upstream package doesn't expose), so it reports the real version (e.g. `1.0.2`) instead of `"unknown"`.
+
+## Agent discoverability
+
+New endpoints so AI agents can discover the API:
+- `GET /robots.txt`: open policy with Content-Signal directive (`ai-train=yes, search=yes, ai-input=yes`) and explicit allow rules for major AI crawlers.
+- `GET /.well-known/api-catalog`: RFC 9727 linkset (`application/linkset+json`) advertising the OpenAPI spec, docs, and health endpoint.
+- `Link:` headers on the API root advertise the same resources per RFC 8288.
+
+## Documentation
+
+Updated documentations:
+- New: "Parameter Transforms" guide with SVG figures and math
+- New: FAQ page
+- Reorganize model-related pages under "Model" category (Presets, Custom Models, Parameters)
+
+## Migration
+
+`parameter_overrides` is removed. Convert to `parameter_transforms` with `method: "override"`:
+
+| Before (0.2.x) | After (0.3.0) |
+| --- | --- |
+| `parameter_overrides[].parameter_name` | `parameter_transforms[].target_parameter` |
+| `parameter_overrides[].start_date` | `parameter_transforms[].start_date` |
+| `parameter_overrides[].end_date` | `parameter_transforms[].end_date` |
+| `parameter_overrides[].value` | `parameter_transforms[].value` (with `method: "override"`) |

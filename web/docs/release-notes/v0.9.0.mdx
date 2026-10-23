@@ -1,0 +1,61 @@
+---
+title: v0.9.0
+date: 2026-05-27
+summary: |
+  - New `fixed_rate` vaccination rollout strategy (per-day hazard rate)
+  - New optional `coverage` cap on vaccination campaigns
+---
+
+import ReleaseHeader from '@site/src/components/ReleaseHeader';
+
+# v0.9.0
+
+<ReleaseHeader />
+
+## Overview
+
+- Add **`fixed_rate`** vaccination rollout
+- Add an optional **`coverage`** cap to each vaccination campaign
+
+## Simulations
+
+`POST /api/v1/simulations`
+
+### New rollout strategy: `fixed_rate`
+
+Each campaign's `rollout` block now accepts a new type `fixed_rate`, in addition to `flat_count`:
+
+```json
+"rollout": {
+  "type": "fixed_rate",
+  "rate": 0.005
+}
+```
+
+Inside the campaign window this is identical to a spontaneous transition at `rate`: every individual in a source compartment (restricted to `target_age_groups`) has a per-day probability of `1 - exp(-rate * dt)` of moving to the target.
+
+See the [Campaigns guide](/docs/guides/vaccination/campaigns#fixed-rate-per-day-hazard) for the worked example and the [fixed_rate playground template](/playground) for a V-SEIHR setup.
+
+### New per-campaign `coverage` cap
+
+Each campaign now accepts an optional `coverage` block that stops the campaign once cumulative coverage reaches a target fraction of the initial population in `target_age_groups`:
+
+```json
+"coverage": {
+  "fraction": 0.7,
+  "compartments": ["Susceptible_vax", "Exposed_vax", "Infected_vax", "Recovered_vax"]
+}
+```
+
+Once the summed current occupancy of `compartments`, restricted to the campaign's `target_age_groups`, reaches `fraction * initial_population`, the campaign stops contributing to the rate. The cap composes with both `flat_count` and `fixed_rate`, and is independent per campaign.
+
+See the [Coverage cap section](/docs/guides/vaccination/campaigns#coverage-cap) of the Campaigns guide for details and validation rules.
+
+
+## Playground
+
+- New **V-SEIHR (fixed-rate vaccination)** template.
+
+## Documentation
+
+- New "Fixed rate (per-day hazard)" and "Coverage cap" sections in the [Campaigns guide](/docs/guides/vaccination/campaigns).

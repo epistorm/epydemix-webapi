@@ -1,8 +1,9 @@
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import Layout from '@theme/Layout';
+import type {ReactElement} from 'react';
 
-export default function Home(): JSX.Element {
+export default function Home(): ReactElement {
   const {siteConfig} = useDocusaurusContext();
   return (
     <Layout title={siteConfig.title} description="REST API for running epidemic simulations on epydemix">

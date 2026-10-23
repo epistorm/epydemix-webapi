@@ -1,0 +1,37 @@
+---
+title: v0.7.2
+date: 2026-05-20
+summary: |
+  - **Faster simulations** (~2.7x) with identical output, via an engine upgrade and population caching
+  - Upgraded epydemix to v1.2.1
+  - Built-in population data is now cached across requests
+  - Deployment: Python 3.13 image, configurable `PORT`, Cloud Run guide
+---
+
+import ReleaseHeader from '@site/src/components/ReleaseHeader';
+
+# v0.7.2
+
+<ReleaseHeader />
+
+## Overview
+
+- **Faster simulations** (~2.7x) with identical output, via an engine upgrade and population caching
+- Upgraded epydemix to v1.2.1
+- Built-in population data is now cached across requests
+- Deployment: Python 3.13 image, configurable `PORT`, Cloud Run guide
+
+## Performance
+
+Simulations are significantly faster, with identical output for a given request and seed. Measured on Google Cloud Run, a year-long `V-SEIHR` + vaccination run (US population, `Nsim=10`) completes in ~3.6s end-to-end, about 2.7x faster than v0.7.1. Speedup scales with simulation horizon, compartment count, and `Nsim`.
+
+## Deployment
+
+- The container honors the `PORT` environment variable (default `8000`).
+- Base image and project Python bumped to **3.13**.
+- New [Google Cloud Run deployment guide](/docs/deployment/production/google-cloud-run).
+
+## Internals
+
+- Upgraded epydemix to v1.2.1, which resolves plain parameter references directly instead of copying the full parameter set each time step (the case our presets hit).
+- Built-in populations (e.g. `United_States`) and contact matrices are now cached in-process instead of re-downloaded on every request. Custom inline populations are unaffected.

@@ -1,214 +1,166 @@
-"""Epydemix model wrappers and simulation orchestration.
+"""End-to-end simulation orchestration.
 
-This module provides functions for creating and configuring epydemix models,
-and orchestrating the simulation workflow from request to response.
+This module sequences the pre-run pipeline (model construction, population
+loading, parameter transforms, calculated parameters, vaccination flows),
+runs the epydemix simulator, and assembles the response. The individual
+stages live in sibling service modules:
+
+- ``model_service``: model construction, age-varying / calculated parameters,
+  initial conditions, interventions, parameter-results extraction.
+- ``population_service``: population loading (``setup_population``).
+- ``parameter_transforms_service``: source-pass and calc-pass transforms.
+- ``vaccination_service``: vaccination campaigns and dose competition.
+- ``results_processing``: trajectory and summary post-processing.
 """
 
 import uuid
 
 import numpy as np
-from epydemix.model.epimodel import EpiModel
-from epydemix.model.predefined_models import load_predefined_model
-from epydemix.population.population import load_epydemix_population
+import pandas as pd
+from epydemix.model.simulation_results import SimulationResults
 
 from ..api.v1.schemas.simulation import (
-    InitialConditionsConfig,
-    InterventionConfig,
-    ModelConfig,
-    ParameterOverrideConfig,
+    CustomPopulationConfig,
+    ModelMetadata,
+    ParameterResults,
     PopulationConfig,
+    PopulationMetadata,
+    SimulationConfig,
     SimulationMetadata,
     SimulationRequest,
     SimulationResponse,
+    SimulationRunMetadata,
+    SimulationWarning,
 )
+from ..presets import PRESETS
+from ..utils.calculated_parameters import RESERVED_NAMES, transitive_dependencies
+from ..utils.parameter_conversions import resolve_parameter_conversions
+from .model_service import (
+    apply_age_varying_parameters,
+    apply_calculated_parameters,
+    apply_interventions,
+    create_initial_conditions,
+    create_model,
+    extract_parameter_results,
+)
+from .parameter_transforms_service import (
+    apply_parameter_transforms_calc,
+    apply_parameter_transforms_sources,
+)
+from .population_service import DEFAULT_LAYERS, _resolve_contacts_source, setup_population
 from .results_processing import process_results
+from .vaccination_service import apply_vaccinations
 
 
-def create_model(config: ModelConfig) -> EpiModel:
-    """Create an EpiModel from configuration.
+def _padded_internal_simulation(sim: SimulationConfig) -> SimulationConfig:
+    """Return a simulation config padded by one calendar day when ``dt < 1``.
 
-    Creates either a predefined model (SIR, SEIR, SIS) with optional parameter
-    overrides, or a fully custom model with user-defined compartments and
-    transitions.
-
-    Parameters
-    ----------
-    config : ModelConfig
-        Model configuration containing either a preset name or custom
-        compartments and transitions.
-
-    Returns
-    -------
-    EpiModel
-        Configured epydemix EpiModel instance ready for population setup.
+    Works around epydemix's partial-last-day aggregation bug/design: with sub-daily ``dt`` and daily resampling, the user-requested ``end_date`` only gets one
+    sub-step instead of ``1/dt``, so summed transitions on that day are scaled
+    by ``dt``. Padding ``end_date`` by one day lets the originally-requested
+    last day collect its full set of sub-steps; ``_trim_results_to_end_date``
+    drops the padded tail before the response is built.
     """
-    if config.preset:
-        # Use predefined model with parameter overrides
-        params = config.parameters or {}
-        model = load_predefined_model(
-            config.preset,
-            transmission_rate=params.get("transmission_rate", 0.3),
-            recovery_rate=params.get("recovery_rate", 0.1),
-            incubation_rate=params.get("incubation_rate", 0.2),
-        )
-        # Override any additional parameters
-        for param_name, value in params.items():
-            if param_name not in ["transmission_rate", "recovery_rate", "incubation_rate"]:
-                model.add_parameter(parameter_name=param_name, value=value)
-        return model
+    if sim.dt >= 1.0:
+        return sim
+    padded_end = (pd.Timestamp(sim.end_date) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+    return sim.model_copy(update={"end_date": padded_end})
 
-    # Create custom model
-    model = EpiModel(compartments=config.compartments, parameters=config.parameters)
 
-    # Add transitions
-    if config.transitions:
-        for trans in config.transitions:
-            params = trans.params
-            # Spontaneous: single parameter name; mediated: tuple of (rate, compartment)
-            if len(params) == 1:
-                params = params[0]
-            else:
-                params = tuple(params)
-            model.add_transition(
-                source=trans.source,
-                target=trans.target,
-                kind=trans.kind,
-                params=params,
+def _trim_results_to_end_date(results: SimulationResults, user_end_date: str) -> None:
+    """Drop trailing dates past ``user_end_date`` from every trajectory in-place."""
+    cutoff = pd.Timestamp(user_end_date).normalize()
+    for traj in results.trajectories:
+        n_keep = sum(1 for d in traj.dates if pd.Timestamp(d).normalize() <= cutoff)
+        if n_keep == len(traj.dates):
+            continue
+        traj.dates = traj.dates[:n_keep]
+        traj.compartments = {k: v[:n_keep] for k, v in traj.compartments.items()}
+        traj.transitions = {k: v[:n_keep] for k, v in traj.transitions.items()}
+
+
+def _trim_parameter_results(params: ParameterResults, user_end_date: str) -> ParameterResults:
+    """Drop trailing dates past ``user_end_date`` from a ParameterResults block."""
+    cutoff = pd.Timestamp(user_end_date).normalize()
+    n_keep = sum(1 for d in params.dates if pd.Timestamp(d).normalize() <= cutoff)
+    if n_keep == len(params.dates):
+        return params
+    trimmed_data = {
+        name: {grp: values[:n_keep] for grp, values in groups.items()}
+        for name, groups in params.data.items()
+    }
+    return ParameterResults(dates=params.dates[:n_keep], data=trimmed_data)
+
+
+def _validate_resolved_parameters(model, preset_def, transitions: list[dict]) -> None:
+    """Reject out-of-range values once parameters are evaluated and transformed.
+
+    Only parameters with a fixed meaning are checked: preset probabilities must
+    stay in ``[0, 1]`` and transition rates must be finite and non-negative.
+    Other parameters may be arbitrary expression helpers.
+    """
+    # Check probabilities are finite and between 0 and 1.
+    for name in preset_def.probability_parameters if preset_def else ():
+        values = np.asarray(model.parameters[name], dtype=float)
+        if not np.all(np.isfinite(values) & (values >= 0) & (values <= 1)):
+            raise ValueError(f"Parameter '{name}' must be between 0 and 1")
+    # Check transition rates are finite and non-negative.
+    for name in dict.fromkeys(t["params"][0] for t in transitions):
+        values = np.asarray(model.parameters[name], dtype=float)
+        if not np.all(np.isfinite(values)) or np.any(values < 0):
+            raise ValueError(
+                f"Transition rate '{name}' must be finite and non-negative "
+                f"(minimum {np.nanmin(values):g})"
             )
 
-    return model
 
-
-def setup_population(model: EpiModel, config: PopulationConfig) -> None:
-    """Load and set population for the model.
-
-    Loads a population from the epydemix data repository and attaches it
-    to the model.
-
-    Parameters
-    ----------
-    model : EpiModel
-        EpiModel to configure with population data.
-    config : PopulationConfig
-        Population configuration specifying location, contact source,
-        and optional layer filtering.
-    """
-    population = load_epydemix_population(
-        population_name=config.name,
-        contacts_source=config.contacts_source,
-        layers=config.layers or ["home", "work", "school", "community"],
-        age_group_mapping=config.age_group_mapping,
+def _build_population_metadata(
+    request_population: PopulationConfig,
+    model_population,
+) -> PopulationMetadata:
+    """Build PopulationMetadata from the request and the loaded model population."""
+    age_groups = {
+        str(name): int(count) for name, count in zip(model_population.Nk_names, model_population.Nk)
+    }
+    contact_matrices = {
+        str(layer): np.asarray(matrix, dtype=float).tolist()
+        for layer, matrix in (model_population.contact_matrices or {}).items()
+    }
+    if isinstance(request_population, CustomPopulationConfig):
+        return PopulationMetadata(
+            source="custom",
+            name=request_population.name,
+            contacts_source=None,
+            layers=list(request_population.contact_matrices.keys()),
+            age_group_mapping=None,
+            total=int(model_population.total_population),
+            age_groups=age_groups,
+            contact_matrices=contact_matrices,
+        )
+    return PopulationMetadata(
+        source="builtin",
+        name=request_population.name,
+        contacts_source=_resolve_contacts_source(
+            request_population.name, request_population.contacts_source
+        ),
+        layers=request_population.layers or DEFAULT_LAYERS,
+        age_group_mapping=request_population.age_group_mapping,
+        total=int(model_population.total_population),
+        age_groups=age_groups,
+        contact_matrices=contact_matrices,
     )
-    model.set_population(population)
 
 
-def create_initial_conditions(
-    model: EpiModel, config: InitialConditionsConfig | None
-) -> dict[str, np.ndarray] | None:
-    """Create initial conditions dictionary from configuration.
-
-    Builds initial conditions either from absolute counts per compartment
-    or from percentages of the total population.
-
-    Parameters
-    ----------
-    model : EpiModel
-        EpiModel with population already set, needed for population counts.
-    config : InitialConditionsConfig or None
-        Initial conditions configuration. If None, epydemix defaults are used.
-
-    Returns
-    -------
-    dict of {str: np.ndarray} or None
-        Dictionary mapping compartment names to arrays of counts per age group,
-        or None to use epydemix default initial conditions.
-    """
-    if config is None:
-        return None
-
-    if config.method == "absolute" and config.compartments:
-        return {k: np.array(v) for k, v in config.compartments.items()}
-
-    if config.method == "percentage" and config.initial_percentages:
-        # Build initial conditions from percentages
-        # Get population per age group
-        pop_per_group = np.array(model.population.Nk)
-
-        initial_conditions: dict[str, np.ndarray] = {}
-
-        # Calculate counts for each specified compartment
-        remaining_pop = pop_per_group.copy().astype(float)
-        for comp_name, percentage in config.initial_percentages.items():
-            # Distribute percentage proportionally across age groups
-            comp_count = pop_per_group * (percentage / 100.0)
-            initial_conditions[comp_name] = comp_count
-            remaining_pop -= comp_count
-
-        # Assign remaining population to first compartment (typically Susceptible)
-        first_compartment = model.compartments[0]
-        if first_compartment not in initial_conditions:
-            initial_conditions[first_compartment] = remaining_pop
-        else:
-            initial_conditions[first_compartment] += remaining_pop
-
-        return initial_conditions
-
-    return None
-
-
-def apply_interventions(model: EpiModel, interventions: list[InterventionConfig] | None) -> None:
-    """Apply contact reduction interventions to the model.
-
-    Adds interventions that modify contact rates in specific layers
-    during specified time periods.
-
-    Parameters
-    ----------
-    model : EpiModel
-        EpiModel to configure with interventions.
-    interventions : list of InterventionConfig or None
-        List of intervention configurations. If None or empty, no
-        interventions are applied.
-    """
-    if not interventions:
-        return
-
-    for intervention in interventions:
-        model.add_intervention(
-            layer_name=intervention.layer_name,
-            start_date=intervention.start_date,
-            end_date=intervention.end_date,
-            reduction_factor=intervention.reduction_factor,
-            name=intervention.name or "",
-        )
-
-
-def apply_parameter_overrides(
-    model: EpiModel, overrides: list[ParameterOverrideConfig] | None
-) -> None:
-    """Apply time-varying parameter overrides to the model.
-
-    Modifies parameter values during specified time periods, allowing
-    for scenarios like changing transmission rates.
-
-    Parameters
-    ----------
-    model : EpiModel
-        EpiModel to configure with parameter overrides.
-    overrides : list of ParameterOverrideConfig or None
-        List of parameter override configurations. If None or empty,
-        no overrides are applied.
-    """
-    if not overrides:
-        return
-
-    for override in overrides:
-        model.override_parameter(
-            start_date=override.start_date,
-            end_date=override.end_date,
-            parameter_name=override.parameter_name,
-            value=override.value,
-        )
+def _build_run_metadata(request: SimulationRequest) -> SimulationRunMetadata:
+    """Build SimulationRunMetadata from the request."""
+    return SimulationRunMetadata(
+        start_date=request.simulation.start_date,
+        end_date=request.simulation.end_date,
+        Nsim=request.simulation.Nsim,
+        dt=request.simulation.dt,
+        seed=request.simulation.seed,
+        resample_frequency=request.simulation.resample_frequency,
+    )
 
 
 def run_simulation(request: SimulationRequest) -> SimulationResponse:
@@ -234,80 +186,183 @@ def run_simulation(request: SimulationRequest) -> SimulationResponse:
     SimulationResponse
         Response containing simulation results with compartment and
         transition trajectories, metadata, and optional summary statistics.
-        If an error occurs, returns a failed status with error message.
+
+    Raises
+    ------
+    ValueError
+        If the configuration is invalid for the resolved model or population.
+    PopulationLoadTimeoutError
+        If loading a builtin population times out.
     """
     simulation_id = f"sim_{uuid.uuid4().hex[:12]}"
 
-    try:
-        # Create model
-        model = create_model(request.model)
+    internal_sim = _padded_internal_simulation(request.simulation)
 
-        # Setup population
-        setup_population(model, request.population)
-
-        # Apply interventions
-        apply_interventions(model, request.interventions)
-
-        # Apply parameter overrides
-        apply_parameter_overrides(model, request.parameter_overrides)
-
-        # Create initial conditions
-        initial_conditions = create_initial_conditions(model, request.initial_conditions)
-
-        # Create random number generator from seed if provided
-        rng = None
-        if request.simulation.seed is not None:
-            rng = np.random.default_rng(request.simulation.seed)
-
-        # Run simulations
-        results = model.run_simulations(
-            start_date=request.simulation.start_date,
-            end_date=request.simulation.end_date,
-            Nsim=request.simulation.Nsim,
-            dt=request.simulation.dt,
-            initial_conditions_dict=initial_conditions,
-            resample_frequency=request.simulation.resample_frequency,
-            rng=rng,
+    # Reject any user parameter name that collides with a reserved
+    # SCREAMING_SNAKE_CASE name (e.g. CONTACT_MATRIX_EIGENVALUE_ALL).
+    # These are computed from the model state and injected into the
+    # eval namespace by `apply_calculated_parameters`; allowing a
+    # user override would silently mask the model-derived value.
+    user_param_names = set((request.model.parameters or {}).keys())
+    reserved_collisions = user_param_names & RESERVED_NAMES
+    if reserved_collisions:
+        raise ValueError(
+            f"Parameter name(s) {sorted(reserved_collisions)} collide with "
+            f"reserved name(s) injected by the calculated-parameter evaluator. "
+            f"Reserved names are SCREAMING_SNAKE_CASE constants derived from "
+            f"the model state and cannot be overridden."
         )
 
-        # Process results
-        results_data = process_results(results, request.output, model)
+    # Create model (scalar params applied; age-varying and expression
+    # params are deferred: the former until population is set, the latter
+    # until after transforms so source shapes propagate through).
+    model, list_params, expr_params = create_model(request.model)
 
-        # Build metadata
-        metadata = SimulationMetadata(
-            model_preset=request.model.preset,
+    # Setup population
+    setup_population(model, request.population)
+
+    # Add age-varying base parameters now that the population is resolved.
+    apply_age_varying_parameters(model, list_params)
+
+    # Inject preset-scoped parameter conversions (period→rate, R0→β).
+    # Custom models (no preset) opt out: pass {} so nothing is injected.
+    preset_def = PRESETS[request.model.preset] if request.model.preset else None
+    conversions = preset_def.parameter_conversions if preset_def else {}
+    user_scalar_names = {
+        k for k, v in (request.model.parameters or {}).items() if not isinstance(v, str)
+    }
+    converted, overridden = resolve_parameter_conversions(
+        model.parameters, user_scalar_names, conversions
+    )
+    # User calc-params still win over registry-injected conversions on collision.
+    expr_params = {**converted, **expr_params}
+    # A user expression for the derived also overrides the conversion,
+    # unless it uses the source (directly or through other expressions).
+    overridden += [
+        (conv.source, derived)
+        for derived, conv in conversions.items()
+        if isinstance((request.model.parameters or {}).get(derived), str)
+        and conv.source not in transitive_dependencies(derived, expr_params)
+    ]
+    # Warn only when the user supplied the source too (scalar, list, or
+    # expression); a source that came from preset defaults is not a conflict.
+    warnings = [
+        SimulationWarning(
+            code="parameter_overridden",
+            parameter=source,
+            overridden_by=derived,
+            message=f"{source} was ignored because {derived} was explicitly provided.",
+        )
+        for source, derived in overridden
+        if source in user_param_names
+    ]
+
+    # Apply interventions
+    apply_interventions(model, request.interventions)
+
+    # Source-pass transforms first (balcan/scale/override on non-calc names).
+    # All downstream stages (transforms, vaccination, run, parameter extraction)
+    # use the padded `internal_sim`; the result is trimmed back to the user's
+    # original `end_date` before being returned.
+    calc_names = set(expr_params)
+    apply_parameter_transforms_sources(
+        model,
+        request.parameter_transforms,
+        internal_sim,
+        calculated_names=calc_names,
+    )
+
+    # Evaluate calculated (expression) parameters now that all source
+    # values have their final shapes.
+    apply_calculated_parameters(model, expr_params)
+
+    # Calc-pass transforms on top of evaluated calc-params.
+    apply_parameter_transforms_calc(
+        model,
+        request.parameter_transforms,
+        internal_sim,
+        calculated_names=calc_names,
+    )
+
+    transitions = (
+        preset_def.transitions
+        if preset_def
+        else [t.model_dump() for t in request.model.transitions or []]
+    )
+    _validate_resolved_parameters(model, preset_def, transitions)
+
+    # Create initial conditions first so coverage-cap thresholds can be
+    # resolved against the t=0 population in apply_vaccinations.
+    initial_conditions = create_initial_conditions(
+        model,
+        request.initial_conditions,
+        preset_default=preset_def.default_initial_conditions if preset_def else None,
+    )
+
+    # Vaccination flow (source to vaccinated target). Mutates model in place;
+    # no-op when the request has no `vaccination` block. Returns the resolved
+    # flows (including V-SEIHR's defaulted Susceptible -> Susceptible_vax)
+    # so we can echo them in metadata.
+    resolved_flows = apply_vaccinations(
+        model,
+        request.vaccination,
+        internal_sim,
+        request.model.preset,
+        initial_conditions=initial_conditions,
+    )
+
+    # Create random number generator from seed if provided
+    rng = None
+    if internal_sim.seed is not None:
+        rng = np.random.default_rng(internal_sim.seed)
+
+    # Run simulations
+    results = model.run_simulations(
+        start_date=internal_sim.start_date,
+        end_date=internal_sim.end_date,
+        Nsim=internal_sim.Nsim,
+        dt=internal_sim.dt,
+        initial_conditions_dict=initial_conditions,
+        resample_frequency=internal_sim.resample_frequency,
+        rng=rng,
+    )
+
+    # Drop the padded trailing day(s) so the response matches the user's
+    # requested `end_date`. No-op when `dt >= 1.0` (no padding applied).
+    _trim_results_to_end_date(results, request.simulation.end_date)
+
+    # Process results
+    results_data = process_results(results, request.output, model)
+
+    # Optionally attach effective per-step parameter arrays for plotting.
+    # Build them on the padded grid (so any time-array parameters baked in
+    # by transforms broadcast cleanly) and trim back to the user's range.
+    if request.output is not None and request.output.include_parameters:
+        params = extract_parameter_results(model, internal_sim)
+        results_data.parameters = _trim_parameter_results(params, request.simulation.end_date)
+
+    # Build metadata. Surface the resolved vaccination flows so callers can
+    # see the V-SEIHR default (Susceptible -> Susceptible_vax) rather than
+    # `flows: null`.
+    vaccination_metadata = request.vaccination
+    if vaccination_metadata is not None and resolved_flows is not None:
+        vaccination_metadata = vaccination_metadata.model_copy(update={"flows": resolved_flows})
+    metadata = SimulationMetadata(
+        model=ModelMetadata(
+            preset=request.model.preset,
             compartments=model.compartments,
-            population_name=request.population.name,
-            population_size=int(model.population.total_population),
-            n_age_groups=model.population.num_groups,
-            start_date=request.simulation.start_date,
-            end_date=request.simulation.end_date,
-            n_simulations=request.simulation.Nsim,
-            dt=request.simulation.dt,
-            seed=request.simulation.seed,
-        )
+        ),
+        population=_build_population_metadata(request.population, model.population),
+        simulation=_build_run_metadata(request),
+        interventions=request.interventions,
+        parameter_transforms=request.parameter_transforms,
+        vaccination=vaccination_metadata,
+    )
 
-        return SimulationResponse(
-            simulation_id=simulation_id,
-            status="completed",
-            metadata=metadata,
-            results=results_data,
-        )
-
-    except Exception as e:
-        return SimulationResponse(
-            simulation_id=simulation_id,
-            status="failed",
-            metadata=SimulationMetadata(
-                compartments=[],
-                population_name=request.population.name,
-                population_size=0,
-                n_age_groups=0,
-                start_date=request.simulation.start_date,
-                end_date=request.simulation.end_date,
-                n_simulations=request.simulation.Nsim,
-                dt=request.simulation.dt,
-                seed=request.simulation.seed,
-            ),
-            error=str(e),
-        )
+    return SimulationResponse(
+        simulation_id=simulation_id,
+        status="completed",
+        metadata=metadata,
+        results=results_data,
+        warnings=warnings,
+    )

@@ -1,0 +1,146 @@
+---
+sidebar_position: 3
+---
+
+import EndpointSelector from '@site/src/components/EndpointSelector';
+import CurlBlock from '@site/src/components/CurlBlock';
+
+# Custom Populations
+
+<EndpointSelector />
+
+Instead of a [preset](./presets.mdx), you can define a population inline by specifying age groups and contact matrices yourself. This is useful for synthetic populations (homogeneous mixing, toy two-group models) or for plugging in demographics and contact data that aren't available through epydemix.
+
+To opt in, set `population.source` to `"custom"` and provide `age_groups` and `contact_matrices`.
+
+## Structure
+
+A custom population requires two things.
+
+### Age groups
+
+A mapping from group name to population count. **Insertion order matters**: it defines the row and column order used by every contact matrix and by any age-varying parameter.
+
+```json
+"age_groups": {
+  "A": 100000,
+  "B": 100000
+}
+```
+
+### Contact matrices
+
+One square matrix per layer, keyed by layer name. Each matrix must be `n` by `n` where `n = len(age_groups)`, and rows and columns follow the same order as `age_groups`. The keys define your layer set: pick names that match anything you'll target with [interventions](../running-a-simulation.mdx).
+
+```json
+"contact_matrices": {
+  "home": [[0.10, 0.05], [0.05, 0.10]],
+  "work": [[0.15, 0.20], [0.20, 0.15]]
+}
+```
+
+The layer name `overall` is reserved by epydemix and rejected.
+
+## Example: Homogeneous (single group)
+
+The simplest case: one age group and a 1x1 contact matrix. This reproduces the classic homogeneous-mixing compartmental model.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "SIR",
+      "parameters": {"transmission_rate": 0.3, "recovery_rate": 0.1}
+    },
+    "population": {
+      "source": "custom",
+      "name": "Homogeneous N=100k",
+      "age_groups": {"A": 100000},
+      "contact_matrices": {"all": [[1.0]]}
+    },
+    "simulation": {
+      "start_date": "2024-01-01",
+      "end_date": "2024-06-01",
+      "Nsim": 50
+    }
+  }'`}
+</CurlBlock>
+
+## Example: Two age groups
+
+A toy two-group population with a single mixing layer.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "SIR",
+      "parameters": {"transmission_rate": 0.3, "recovery_rate": 0.1}
+    },
+    "population": {
+      "source": "custom",
+      "name": "Toy two-group",
+      "age_groups": {"A": 100, "B": 100},
+      "contact_matrices": {"all": [[0.2, 0.3], [0.3, 0.2]]}
+    },
+    "simulation": {
+      "start_date": "2024-01-01",
+      "end_date": "2024-01-31",
+      "Nsim": 5
+    }
+  }'`}
+</CurlBlock>
+
+## Example: Multiple layers with an intervention
+
+Custom layers can be targeted by interventions just like preset layers. Here a `lockdown` cuts contacts in the `work` layer to 50% for ten days.
+
+<CurlBlock>
+{`curl -X POST BASE_URL/simulations \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": {
+      "preset": "SIR",
+      "parameters": {"transmission_rate": 0.3, "recovery_rate": 0.1}
+    },
+    "population": {
+      "source": "custom",
+      "name": "Two-layer custom",
+      "age_groups": {"A": 100, "B": 100},
+      "contact_matrices": {
+        "home": [[0.10, 0.05], [0.05, 0.10]],
+        "work": [[0.15, 0.20], [0.20, 0.15]]
+      }
+    },
+    "interventions": [
+      {
+        "layer_name": "work",
+        "start_date": "2024-01-10",
+        "end_date": "2024-01-20",
+        "reduction_factor": 0.5,
+        "name": "lockdown"
+      }
+    ],
+    "simulation": {
+      "start_date": "2024-01-01",
+      "end_date": "2024-01-31",
+      "Nsim": 10
+    }
+  }'`}
+</CurlBlock>
+
+## Validation rules
+
+Requests that violate any of the following return `422`:
+
+| Rule | What gets rejected |
+|---|---|
+| `age_groups` non-empty | `{}` |
+| `contact_matrices` non-empty | `{}` |
+| Each matrix is `n` by `n` where `n = len(age_groups)` | row count mismatch, non-square rows |
+| Layer name is not `overall` | `{"overall": [[...]]}` |
+| Each age group count is positive | `{"A": 0}`, `{"A": -10}` |
+| Contact matrix entries are finite and non-negative | `[[-8, 0], [0, -6]]`, `1e400` |
+| Each intervention `layer_name` is one of the `contact_matrices` keys | `"school"` when only `all` is defined |

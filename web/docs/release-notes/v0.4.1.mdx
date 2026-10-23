@@ -1,0 +1,89 @@
+---
+title: v0.4.1
+date: 2026-05-01
+summary: |
+  - Improve AI integration: MCP server, `llms.txt` / `llms-full.txt`, markdown content negotiation, per-page Copy / Open in chat widget
+  - `max_value` in seasonality is now optional (default `1.0`)
+---
+
+import ReleaseHeader from '@site/src/components/ReleaseHeader';
+
+# v0.4.1
+
+<ReleaseHeader />
+
+## Overview
+- Improve AI integration
+  - add MCP server at `/mcp`
+  - publish `llms.txt` / `llms-full.txt`
+  - support markdown content negotiation on docs
+  - add a per-page **Copy page / Open in chat** widget
+- Make `BalcanTransform.max_value` optional (default `1.0`); recommended pattern is to set only `min_value`
+
+## Improved AI integration
+
+### MCP server
+
+The API now exposes itself as a Model Context Protocol server at:
+
+```
+https://epyscenario-api.isi.it/mcp
+```
+
+Setup snippets for each client are in the new [AI Integration](https://epydemix-webapi.vercel.app/docs/ai-integration) docs page.
+The MCP layer can be disabled per deployment with `EPYDEMIX_MCP_ENABLED=false`. An MCP Server Card (SEP-1649) is also published at `/.well-known/mcp/server-card.json` for agent discovery.
+
+### llms.txt and llms-full.txt
+
+The docs site now publishes the [llmstxt.org](https://llmstxt.org) resources:
+- `/llms.txt`: short index of every doc page (~30 lines)
+- `/llms-full.txt`: every doc page concatenated as a single markdown file (~37 KB)
+
+Both are advertised in `/.well-known/api-catalog`. Generated from the source MDX files by `scripts/generate_llms_txt.py` on every Vercel deploy.
+
+### Markdown content negotiation
+
+When the docs site receives `Accept: text/markdown`, it returns the markdown source instead of the rendered HTML page:
+
+```bash
+# HTML (default for browsers)
+curl https://epydemix-webapi.vercel.app/docs/intro
+
+# Markdown (for AI agents)
+curl -H 'Accept: text/markdown' https://epydemix-webapi.vercel.app/docs/intro
+```
+
+`Vary: Accept` is set so caches keep both representations separate.
+
+### Copy page / Open in chat widget
+
+Every doc page now has a combo widget at the top right with two click zones:
+- **Copy page**: copies the page as markdown to the clipboard
+- **Open in chat**: dropdown for **Open Markdown** / **Open in Claude** / **Open in ChatGPT**, each opening a new tab with the page URL prefilled in the prompt
+
+Driven by per-page markdown mirrors at `/docs/<path>.md` that the same script writes alongside `llms-full.txt`.
+
+## Simulations
+
+`POST /v1/simulations`
+
+### BalcanTransform max_value is now optional
+
+`max_value` defaults to `1.0`. The recommended pattern is to leave it unset and only configure `min_value` to express the seasonal floor as a fraction of the baseline:
+
+```json
+{
+  "target_parameter": "transmission_rate",
+  "method": "balcan",
+  "max_date": "2024-01-15",
+  "min_date": "2024-07-15",
+  "min_value": 0.1
+}
+```
+
+Existing requests that pass `max_value` explicitly continue to work unchanged. The multiplier shape depends only on the ratio `min_value / max_value`, so `(max_value=0.4, min_value=0.1)` produces exactly the same dynamics as `(max_value=1, min_value=0.25)`.
+
+## Documentation
+
+- New: "AI Integration" page covering chat-style usage and MCP setup for Claude Desktop, Claude Code, Cursor, Codex, and Claude.ai web
+- Updated: Seasonality docs reflect the new optional `max_value` and clarify the multiplier semantics
