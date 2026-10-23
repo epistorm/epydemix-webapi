@@ -119,8 +119,8 @@ def apply_parameter_scaling(
     """Multiply a parameter inside an inclusive date window."""
     dates = compute_simulation_dates(start_date, end_date, dt=dt)
     active = (
-        (dates >= np.datetime64(scaling_start))
-        & (dates <= np.datetime64(scaling_end))
+        (dates.astype("datetime64[D]") >= np.datetime64(scaling_start))
+        & (dates.astype("datetime64[D]") <= np.datetime64(scaling_end))
     )
     factors = np.where(active, float(factor), 1.0)
     return _multiply_parameter(value, factors)
@@ -140,8 +140,8 @@ def apply_parameter_override(
     dates = compute_simulation_dates(start_date, end_date, dt=dt)
     result = _broadcast_parameter(value, len(dates), number_of_groups)
     active = (
-        (dates >= np.datetime64(override_start))
-        & (dates <= np.datetime64(override_end))
+        (dates.astype("datetime64[D]") >= np.datetime64(override_start))
+        & (dates.astype("datetime64[D]") <= np.datetime64(override_end))
     )
     result[active, :] = np.asarray(override_value, dtype=float)
     return result
@@ -163,8 +163,8 @@ def apply_vaccination_campaigns(model, population, simulation_dates, initial_con
             dtype=np.int64,
         )
         active = (
-            (simulation_dates >= np.datetime64(campaign["start_date"]))
-            & (simulation_dates <= np.datetime64(campaign["end_date"]))
+            (simulation_dates.astype("datetime64[D]") >= np.datetime64(campaign["start_date"]))
+            & (simulation_dates.astype("datetime64[D]") <= np.datetime64(campaign["end_date"]))
         )
         rollout = campaign["rollout"]
         rate_based = rollout["type"] == "fixed_rate"

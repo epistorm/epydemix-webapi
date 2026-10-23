@@ -6,7 +6,7 @@ import ast
 from pprint import pformat
 
 from ...api.v1.schemas.simulation import SimulationRequest
-from ...utils.calculated_parameters import RESERVED_NAMES, _parse, _validate, extract_dependencies
+from ...utils.calculated_parameters import RESERVED_NAMES, extract_dependencies, parse_expression
 
 
 def _literal(value: object) -> str:
@@ -56,7 +56,7 @@ def _render_expression(expression: str) -> str:
             "recovery_rate=get_parameter_for_calculation(model, 'recovery_rate'), "
             "contact_eigenvalue=calculate_dominant_contact_eigenvalue(population))"
         )
-    tree = ast.parse(expression, mode="eval")
+    tree = parse_expression(expression, "export")
     rendered = _ExpressionRenderer().visit(tree)
     ast.fix_missing_locations(rendered)
     return ast.unparse(rendered.body)
@@ -121,8 +121,7 @@ def _validate_expressions(expressions: dict[str, str], parameter_names: set[str]
     """
     known_names = parameter_names | set(expressions) | set(RESERVED_NAMES)
     for name, expression in expressions.items():
-        tree = _parse(expression, name)
-        _validate(tree, name)
+        tree = parse_expression(expression, name)
         unknown = extract_dependencies(tree) - known_names
         if unknown:
             raise ValueError(
@@ -191,7 +190,7 @@ def _render_transform_calls(
     multiplicative = [item for item in transforms if item.method in ("balcan", "scale")]
     overrides = [item for item in transforms if item.method == "override"]
     for item in [*multiplicative, *overrides]:
-        lines.extend(["", f"# Apply {item.method} to {item.target_parameter}."])
+        lines.append("")
         if item.method == "balcan":
             lines.extend(
                 [

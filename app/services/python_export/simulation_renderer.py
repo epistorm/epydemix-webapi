@@ -5,6 +5,7 @@ from __future__ import annotations
 from ...api.v1.schemas.simulation import CustomPopulationConfig, SimulationRequest
 from ...presets import PRESETS
 from ...utils.calculated_parameters import RESERVED_NAMES
+from ...utils.parameter_conversions import resolve_parameter_conversions
 from ..population_service import DEFAULT_LAYERS
 from .expression_renderer import (
     _expression_order,
@@ -94,19 +95,16 @@ def render_simulation_python(request: SimulationRequest) -> str:
 
     parameters_to_delete: list[str] = []
     if preset is not None:
-        active_names = set(scalar_parameters) | set(list_parameters)
+        parameters = {**scalar_parameters, **list_parameters}
         user_non_expression = {
             name for name, value in raw_parameters.items() if not isinstance(value, str)
         }
-        converted: dict[str, str] = {}
-        for derived_name, conversion in preset.parameter_conversions.items():
-            if derived_name in user_non_expression:
-                if conversion.source in active_names:
-                    parameters_to_delete.append(conversion.source)
-                    active_names.discard(conversion.source)
-                continue
-            if conversion.source in active_names:
-                converted[derived_name] = conversion.expression
+        converted, _ = resolve_parameter_conversions(
+            parameters, user_non_expression, preset.parameter_conversions, set(expressions)
+        )
+        parameters_to_delete = sorted(
+            (scalar_parameters.keys() | list_parameters.keys()) - parameters.keys()
+        )
         expressions = {**converted, **expressions}
 
     needs_eigenvalue = any(
@@ -264,7 +262,6 @@ def render_simulation_python(request: SimulationRequest) -> str:
         sections.extend(
             [
                 "",
-                f"# Calculate {name}.",
                 "model.add_parameter(",
                 f"    parameter_name={name!r},",
                 "    value=normalize_calculated_parameter(",
@@ -283,7 +280,7 @@ def render_simulation_python(request: SimulationRequest) -> str:
             for name, value in values.items()
         )
         sections.extend(["", f"initial_conditions = {{\n{entries}\n}}"])
-    elif initial is not None and initial.method == "percentage":
+    elif initial is not None and initial.method == "percentage" and initial.initial_percentages:
         percentages = initial.initial_percentages or {}
         sections.extend(
             [
@@ -357,27 +354,27 @@ def render_simulation_python(request: SimulationRequest) -> str:
             f"    Nsim={sim.Nsim!r},",
             "    dt=dt,",
             "    initial_conditions_dict=initial_conditions,",
-            f"    resample_frequency={sim.resample_frequency!r},",
+            "    resample_frequency=None,",
             "    rng=rng,",
             ")",
         ]
     )
-    if sim.dt < 1:
-        sections.extend(
-            [
-                "",
-                "cutoff = np.datetime64(end_date)",
-                "for trajectory in results.trajectories:",
-                "    keep = sum(np.datetime64(value) <= cutoff for value in trajectory.dates)",
-                "    trajectory.dates = trajectory.dates[:keep]",
-                "    trajectory.compartments = {",
-                "        name: values[:keep] for name, values in trajectory.compartments.items()",
-                "    }",
-                "    trajectory.transitions = {",
-                "        name: values[:keep] for name, values in trajectory.transitions.items()",
-                "    }",
-            ]
-        )
+    sections.extend(
+        [
+            "",
+            'cutoff = np.datetime64(end_date, "D")',
+            "for trajectory in results.trajectories:",
+            '    keep = sum(np.datetime64(value, "D") <= cutoff for value in trajectory.dates)',
+            "    trajectory.dates = trajectory.dates[:keep]",
+            "    trajectory.compartments = {",
+            "        name: values[:keep] for name, values in trajectory.compartments.items()",
+            "    }",
+            "    trajectory.transitions = {",
+            "        name: values[:keep] for name, values in trajectory.transitions.items()",
+            "    }",
+            f"    trajectory.resample({sim.resample_frequency!r})",
+        ]
+    )
 
     quantiles = request.output.quantiles if request.output and request.output.quantiles else None
     sections.extend(
