@@ -797,7 +797,9 @@ def test_basic_preset_defaults_give_R0_2_5(client, preset, population):
     rates = _get_effective_rates(client, preset, population, {})
     eigenvalue = _calculate_dominant_eigenvalue(population)
     assert rates["recovery_rate"] == pytest.approx(0.1, abs=1e-12)
+    # transmission_rate = R0 * recovery_rate / eigenvalue.
     assert rates["transmission_rate"] == pytest.approx(2.5 * 0.1 / eigenvalue, rel=1e-9)
+    # R0 = transmission_rate * eigenvalue / recovery_rate.
     effective_R0 = rates["transmission_rate"] * eigenvalue / rates["recovery_rate"]
     assert effective_R0 == pytest.approx(2.5, rel=1e-9)
     if preset == "SEIR":
@@ -820,12 +822,14 @@ def test_basic_preset_explicit_R0_and_infectious_period(client, preset):
 
     rates = _get_effective_rates(client, preset, population, {"R0": 1.5})
     # 0.1 is the default recovery_rate for the SIR, SEIR, and SIS presets.
+    # transmission_rate = R0 * recovery_rate / eigenvalue.
     assert rates["transmission_rate"] == pytest.approx(1.5 * 0.1 / eigenvalue, rel=1e-9)
 
     rates = _get_effective_rates(client, preset, population, {"infectious_period": 5.0})
     # recovery_rate = 1 / infectious_period = 1 / 5.0 = 0.2.
     assert rates["recovery_rate"] == pytest.approx(0.2, abs=1e-12)
     # 2.5 is the default R0 for the SIR, SEIR, and SIS presets.
+    # transmission_rate = R0 * recovery_rate / eigenvalue.
     assert rates["transmission_rate"] == pytest.approx(2.5 * 0.2 / eigenvalue, rel=1e-9)
 
 
