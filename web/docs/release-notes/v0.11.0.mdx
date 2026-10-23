@@ -1,0 +1,84 @@
+---
+title: v0.11.0
+date: 2026-10-23
+summary: |
+  - Fix duplicate infection counts with epydemix 1.4.0
+  - Default SIR, SEIR, and SIS to R0 = 2.5
+  - Validate simulation inputs and return HTTP errors for failed requests
+  - Warn when explicit rates override supplied conversion inputs
+---
+
+import ReleaseHeader from '@site/src/components/ReleaseHeader';
+
+# v0.11.0
+
+<ReleaseHeader />
+
+## Overview
+
+v0.11.0 addresses the simulation counting, preset defaults, and input handling
+reported in [epydemix issue #25](https://github.com/epistorm/epydemix/issues/25).
+Existing clients need to account for changed defaults and HTTP error responses.
+
+## Correct infection counts
+
+The API now requires epydemix 1.4.0 or later, with 1.4.0 recorded in `uv.lock`.
+This includes the upstream fix for duplicate transition counts when multiple
+mediated transitions share the same source and target compartments.
+V-SEIR and V-SEIHR now count each infection once. Custom models with the same
+transition pattern also receive the fix.
+
+## Preset defaults
+
+SIR, SEIR, and SIS now default to `R0: 2.5` instead of a fixed
+`transmission_rate: 0.3`. The API derives the transmission rate from the recovery
+rate and the selected population's contact matrix. The default recovery rate
+remains `0.1`.
+
+The previous fixed rates could imply a much larger R0 depending on the
+population's contact matrix. For example, the effective R0 for Vermont was
+approximately 42.
+
+Requests that omit both `R0` and `transmission_rate` produce different results.
+To retain the previous transmission rate, pass `"transmission_rate": 0.3`
+explicitly. V-SEIR and V-SEIHR already default to `R0: 2.5`.
+
+See [Preset conversions and precedence](/docs/guides/model/parameters/overview#preset-conversions-and-precedence).
+
+## Input validation and HTTP errors
+
+Invalid requests now return HTTP `422` before the simulation starts. Validation
+covers invalid or reversed dates, unknown initial-condition compartments,
+out-of-range or non-finite numeric inputs, invalid model references, and negative
+resolved transition rates. Python exports also validate their inputs.
+
+Simulation failures no longer return HTTP `200` with `"status": "failed"`.
+Clients must handle HTTP errors and read the response's `detail` field:
+
+| HTTP status | Meaning |
+| --- | --- |
+| `422` | Invalid request |
+| `504` | Built-in population loading timed out |
+| `500` | Unexpected internal error, with details kept in server logs |
+
+Successful simulations still return HTTP `200` with `"status": "completed"`.
+See [Errors](/docs/guides/running-a-simulation#errors) for the request constraints.
+
+## Parameter warnings
+
+Simulation responses now include a `warnings` list that explains when an input
+was ignored. For example, passing both `R0` and `transmission_rate` uses
+`transmission_rate` and returns a `parameter_overridden` warning for `R0`.
+The simulation still runs using the explicit rate. This also applies when an
+explicit rate expression does not use the source, directly or through another
+expression.
+
+There is no warning when only a preset default is overridden or when the rate
+expression uses the supplied source. See [Warnings](/docs/guides/warnings) for
+examples and the warning fields.
+
+## Documentation
+
+- Update preset and parameter guides with the new defaults and precedence rules.
+- Document input constraints, HTTP errors, and parameter warnings.
+- Regenerate the OpenAPI reference for v0.11.0.
