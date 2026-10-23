@@ -1,0 +1,47 @@
+---
+title: v0.10.0
+date: 2026-08-21
+summary: |
+  - New API endpoints for exporting requests as executable epydemix Python
+---
+
+import ReleaseHeader from '@site/src/components/ReleaseHeader';
+
+# v0.10.0
+
+<ReleaseHeader />
+
+## Overview
+
+v0.10.0 adds Python export endpoints that return executable Python code
+equivalent to requests sent to the web API. The generated scripts call epydemix
+directly, allowing users to inspect the Python code and run the corresponding
+simulation or resource setup locally.
+
+## Python exports
+
+The following endpoints now return Python source files:
+
+| Endpoint | Exported operation |
+| --- | --- |
+| `POST /api/v1/simulations/export/python` | Complete simulation request |
+| `GET /api/v1/populations/export/python` | Available population locations |
+| `POST /api/v1/populations/export/python` | Custom population construction |
+| `GET /api/v1/populations/{name}/export/python` | Named population loading |
+| `GET /api/v1/populations/{name}/contacts/export/python` | Contact matrices and spectral radii |
+| `GET /api/v1/models/presets/{name}/export/python` | Model preset construction |
+
+Exported simulation programs construct the population and model, run the
+simulation, and write `compartments.csv` and `transitions.csv`. They include
+native helper definitions when a request uses calculated parameters, R0
+conversion, Balcan seasonality, scaling, overrides, or vaccination campaigns.
+
+Interventions, custom initial conditions, output quantiles, and subdaily time
+steps are also preserved. Seeded parity tests compare the generated CSV output
+with the API response across these cases.
+
+## Documentation
+
+- Add the [Python export guide](/docs/guides/python-exports) with request examples and local execution instructions.
+- Add Python export examples to the project README.
+- Update the OpenAPI specification with the new endpoints.

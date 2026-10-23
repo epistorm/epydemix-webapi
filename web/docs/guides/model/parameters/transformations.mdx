@@ -56,7 +56,9 @@ For example, with `transmission_rate = 0.3`, `min_value = 0.1`, `max_date = 2024
 | `max_date` | yes | Date when the multiplier reaches its peak (1.0), `YYYY-MM-DD`. |
 | `min_value` | yes | Lower bound of the seasonal scaling. With the default `max_value=1`, this is the fraction of baseline at the trough (e.g. `0.1` = 10% of baseline). |
 | `max_value` | no | Upper bound of the seasonal scaling. Defaults to `1.0`. Only set this if you want to express both bounds in absolute units; only the **ratio** `min_value / max_value` affects the dynamics. |
-| `min_date` | no | Date of the trough. If set, period = `2 × |min_date − max_date|`. If omitted, period = 365 days. |
+| `min_date` | no | Date of the trough. If set, period = `2 × |min_date − max_date|`, so it must differ from `max_date`. If omitted, period = 365 days. |
+
+`max_value: 0` and `min_date` equal to `max_date` are rejected with a `422` because they would divide by zero.
 
 <CurlBlock>
 {`curl -X POST BASE_URL/simulations \\

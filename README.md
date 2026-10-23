@@ -20,10 +20,15 @@ uv run pytest
 ## API Endpoints
 
 - `POST /api/v1/simulations` - Run epidemic simulation
+- `POST /api/v1/simulations/export/python` - Export a simulation as executable Python
 - `GET /api/v1/populations` - List available populations
+- `GET|POST /api/v1/populations/export/python` - Export population discovery or custom setup
 - `GET /api/v1/populations/{name}` - Get population details
+- `GET /api/v1/populations/{name}/export/python` - Export population loading
 - `GET /api/v1/populations/{name}/contacts` - Get contact matrices
+- `GET /api/v1/populations/{name}/contacts/export/python` - Export contact-matrix loading
 - `GET /api/v1/models/presets` - List model presets
+- `GET /api/v1/models/presets/{name}/export/python` - Export a preset model
 - `GET /api/v1/health` - Health check
 
 ## Docker

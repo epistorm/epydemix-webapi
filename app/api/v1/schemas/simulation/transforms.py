@@ -4,6 +4,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from ..common import DateStr
+
 
 class _BaseTransform(BaseModel):
     """Common fields for all parameter transforms."""
@@ -37,7 +39,7 @@ class BalcanTransform(_BaseTransform):
     """
 
     method: Literal["balcan"]
-    max_date: str = Field(
+    max_date: DateStr = Field(
         ...,
         description="Date when the multiplier reaches its peak (1.0), `YYYY-MM-DD`.",
     )
@@ -59,13 +61,21 @@ class BalcanTransform(_BaseTransform):
             "shape depends only on the ratio `min_value / max_value`."
         ),
     )
-    min_date: str | None = Field(
+    min_date: DateStr | None = Field(
         default=None,
         description=(
             "Date of trough, `YYYY-MM-DD`. If set, period = `2 * |min_date - max_date|`. "
             "If omitted, period defaults to 365 days."
         ),
     )
+
+    @model_validator(mode="after")
+    def _validate_nonzero(self) -> "BalcanTransform":
+        if self.max_value == 0:
+            raise ValueError("'max_value' must not be 0")
+        if self.min_date == self.max_date:
+            raise ValueError("'min_date' must differ from 'max_date' (zero seasonal period)")
+        return self
 
 
 class ScaleTransform(_BaseTransform):
@@ -77,8 +87,8 @@ class ScaleTransform(_BaseTransform):
     """
 
     method: Literal["scale"]
-    start_date: str = Field(..., description="Window start, `YYYY-MM-DD`.")
-    end_date: str = Field(..., description="Window end, `YYYY-MM-DD`. Must be `>= start_date`.")
+    start_date: DateStr = Field(..., description="Window start, `YYYY-MM-DD`.")
+    end_date: DateStr = Field(..., description="Window end, `YYYY-MM-DD`. Must be `>= start_date`.")
     factor: float = Field(
         ..., description="Multiplicative factor applied within `[start_date, end_date]`."
     )
@@ -102,8 +112,8 @@ class OverrideTransform(_BaseTransform):
     """
 
     method: Literal["override"]
-    start_date: str = Field(..., description="Window start, `YYYY-MM-DD`.")
-    end_date: str = Field(..., description="Window end, `YYYY-MM-DD`. Must be `>= start_date`.")
+    start_date: DateStr = Field(..., description="Window start, `YYYY-MM-DD`.")
+    end_date: DateStr = Field(..., description="Window end, `YYYY-MM-DD`. Must be `>= start_date`.")
     value: float | list[float] = Field(
         ...,
         description=(
