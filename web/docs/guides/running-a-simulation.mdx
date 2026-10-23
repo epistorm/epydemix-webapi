@@ -32,7 +32,7 @@ We'll use the `SIR` preset. See [Model Presets](./model/presets/overview.mdx) fo
     "model": {
       "preset": "SIR",
       "parameters": {
-        "transmission_rate": 0.3,
+        "R0": 2.5,
         "recovery_rate": 0.1
       }
     },
@@ -95,9 +95,9 @@ The response contains `metadata`, `results`, and a `status` field. By default th
       "data": {
         "Susceptible": {
           "total": {
-            "0.5": [337330136.0, 334286966.0, "..."],
-            "0.025": [337330089.45, 334285584.7, "..."],
-            "0.975": [337330182.55, 334288347.3, "..."]
+            "0.5": [337708551.0, 337624028.5, "..."],
+            "0.025": [337708111.775, 337623521.8, "..."],
+            "0.975": [337709191.6, 337625019.0, "..."]
           }
         }
       }
@@ -107,9 +107,9 @@ The response contains `metadata`, `results`, and a `status` field. By default th
       "data": {
         "Susceptible_to_Infected": {
           "total": {
-            "0.5": [621391.0, 3043170.0, "..."],
-            "0.025": [621344.45, 3041835.25, "..."],
-            "0.975": [621437.55, 3044504.75, "..."]
+            "0.5": [73911.0, 84270.0, "..."],
+            "0.025": [73270.4, 83967.6, "..."],
+            "0.975": [74350.225, 85011.1, "..."]
           }
         }
       }
@@ -119,20 +119,20 @@ The response contains `metadata`, `results`, and a `status` field. By default th
         "Infected": {
           "total": {
             "quantiles": {
-              "0.025": 121800000.0,
-              "0.5":   124500000.0,
-              "0.975": 127100000.0
+              "0.025": 71966341.525,
+              "0.5":   71990700.5,
+              "0.975": 72009849.2
             },
-            "peak_date": "2024-02-14"
+            "peak_date": "2024-02-21"
           },
-          "0-4":  { "quantiles": { "0.5": 4120000.0, "...": 0 }, "peak_date": "2024-02-13" },
-          "65+":  { "quantiles": { "0.5": 16800000.0, "...": 0 }, "peak_date": "2024-02-16" }
+          "0-4":  { "quantiles": { "0.5": 3593518.5, "...": 0 }, "peak_date": "2024-02-23" },
+          "65+":  { "quantiles": { "0.5": 8681842.5, "...": 0 }, "peak_date": "2024-02-27" }
         }
       },
       "totals": {
         "Susceptible_to_Infected": {
-          "total": { "quantiles": { "0.025": 213000000.0, "0.5": 215000000.0, "0.975": 217000000.0 } },
-          "0-4":   { "quantiles": { "0.5":  11800000.0, "...": 0 } }
+          "total": { "quantiles": { "0.025": 281387422.725, "0.5": 281428513.5, "0.975": 281457329.9 } },
+          "0-4":   { "quantiles": { "0.5":  14368532.5, "...": 0 } }
         }
       }
     }
@@ -192,7 +192,7 @@ For a quick read of one stat from the response, pipe through [`jq`](https://jqla
 {`curl -s -X POST BASE_URL/simulations \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": {"preset": "SIR", "parameters": {"transmission_rate": 0.3, "recovery_rate": 0.1}},
+    "model": {"preset": "SIR", "parameters": {"R0": 2.5, "recovery_rate": 0.1}},
     "population": {"name": "United_States"},
     "simulation": {"start_date": "2024-01-01", "end_date": "2024-06-01", "Nsim": 100}
   }' | jq '.results.summary.peaks.Infected.total | {peak_date, median: .quantiles["0.5"]}'`}
@@ -200,8 +200,8 @@ For a quick read of one stat from the response, pipe through [`jq`](https://jqla
 
 ```json
 {
-  "peak_date": "2024-01-06",
-  "median": 290283372.5
+  "peak_date": "2024-02-26",
+  "median": 71936946.5
 }
 ```
 

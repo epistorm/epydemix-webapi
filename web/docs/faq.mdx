@@ -120,7 +120,7 @@ Pass *either* the period or the rate, not both. If both are sent the rate form w
 
 ### How do I set the transmission rate directly instead of R0?
 
-`R0` and `transmission_rate` are parameters for transmission, and are associated with each other. By default, the preset takes `R0` and derives `transmission_rate` from it via a preset-specific formula, which depends on the next-generation matrix of the model's infectious compartments. You can also directly set `transmission_rate` to bypass the conversion.
+`R0` and `transmission_rate` are parameters for transmission, and are associated with each other. By default, the preset takes `R0` and derives `transmission_rate` from it via a preset-specific formula, which depends on the next-generation matrix of the model's infectious compartments. You can also directly set `transmission_rate` to bypass the conversion. Every preset defaults to `R0: 2.5`, so the default `transmission_rate` depends on the chosen population's contact matrix. An explicit `transmission_rate` is used as given, so R0 is no longer fixed at 2.5.
 
 ```json
 "parameters": {
