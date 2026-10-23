@@ -720,7 +720,14 @@ class SimulationRequest(BaseModel):
 
     @model_validator(mode="after")
     def _validate_population_references(self) -> "SimulationRequest":
+        """Check intervention layers and initial-count lengths against the population.
+
+        Interventions must target a configured contact layer. For custom populations,
+        each absolute initial-count array must contain one value per age group.
+        Inconsistent inputs raise ValueError and produce an HTTP 422 response.
+        """
         population = self.population
+        # Custom layers are matrix keys; builtin layers come from the selection or defaults.
         if isinstance(population, CustomPopulationConfig):
             layers = list(population.contact_matrices)
         else:
@@ -732,7 +739,8 @@ class SimulationRequest(BaseModel):
                     f"contact layer of the population. Layers are {layers}."
                 )
         initial = self.initial_conditions
-        # Builtin populations are checked after loading (create_initial_conditions).
+        # Absolute counts need one entry per age group; a single count is not broadcast.
+        # Builtin group counts are checked after loading in create_initial_conditions.
         if (
             isinstance(population, CustomPopulationConfig)
             and initial is not None
