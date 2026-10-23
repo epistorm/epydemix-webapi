@@ -99,10 +99,12 @@ def _validate_resolved_parameters(model, preset_def, transitions: list[dict]) ->
     stay in ``[0, 1]`` and transition rates must be finite and non-negative.
     Other parameters may be arbitrary expression helpers.
     """
+    # Check probabilities are finite and between 0 and 1.
     for name in preset_def.probability_parameters if preset_def else ():
         values = np.asarray(model.parameters[name], dtype=float)
         if not np.all(np.isfinite(values) & (values >= 0) & (values <= 1)):
             raise ValueError(f"Parameter '{name}' must be between 0 and 1")
+    # Check transition rates are finite and non-negative.
     for name in dict.fromkeys(t["params"][0] for t in transitions):
         values = np.asarray(model.parameters[name], dtype=float)
         if not np.all(np.isfinite(values)) or np.any(values < 0):
