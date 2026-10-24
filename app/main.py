@@ -7,7 +7,7 @@ sets up CORS middleware, and defines the root and health check endpoints.
 import json
 import logging
 import math
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request, Response
@@ -16,8 +16,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
-from starlette.concurrency import run_in_threadpool
-from starlette.routing import Route
 
 from .api.v1.router import router as api_v1_router
 from .api.v1.schemas.common import HealthResponse
@@ -30,17 +28,14 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Application lifespan handler for startup/shutdown events."""
-    async with AsyncExitStack() as stack:
-        if settings.mcp_enabled:
-            await stack.enter_async_context(mcp_http.run())
-        if settings.warm_cache_on_startup:
-            logger.info("Warming population cache...")
-            results = await run_in_threadpool(
-                warm_cache, populations=settings.warm_cache_populations
-            )
-            success_count = sum(1 for v in results.values() if v)
-            logger.info(f"Warmed {success_count}/{len(results)} populations")
-        yield
+    # Startup: warm the population cache
+    if settings.warm_cache_on_startup:
+        logger.info("Warming population cache...")
+        results = warm_cache(populations=settings.warm_cache_populations)
+        success_count = sum(1 for v in results.values() if v)
+        logger.info(f"Warmed {success_count}/{len(results)} populations")
+    yield
+    # Shutdown: nothing to clean up
 
 
 app = FastAPI(
@@ -299,14 +294,4 @@ if settings.mcp_enabled:
             "export_model_preset_python",
         ],
     )
-    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
-
-    mcp_http = StreamableHTTPSessionManager(app=mcp.server, stateless=True, json_response=True)
-
-    class MCPTransport:
-        async def __call__(self, scope, receive, send):
-            await mcp_http.handle_request(scope, receive, send)
-
-    app.router.routes.append(
-        Route("/mcp", endpoint=MCPTransport(), methods=["GET", "POST", "DELETE"])
-    )
+    mcp.mount_http()

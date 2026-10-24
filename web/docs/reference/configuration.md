@@ -21,7 +21,6 @@ The API reads environment variables with the `EPYDEMIX_` prefix. Set them before
 | `EPYDEMIX_MAX_SIMULATION_STEPS` | `10000` | Maximum internal timeline points and resampled output points |
 | `EPYDEMIX_MAX_SIMULATION_CELLS` | `10000000` | Budget for trajectory, quantile and parameter values across time, groups and runs |
 | `EPYDEMIX_MAX_CONTACT_CELLS` | `2000000` | Budget for internal time points × age groups² × contact layers, including the combined layer |
-| `EPYDEMIX_MCP_ENABLED` | `true` | Expose stateless MCP tools at `/mcp` |
 
 ## Simulation execution
 
@@ -39,7 +38,3 @@ Warm-up, population detail requests and builtin simulation requests share the sa
 EPYDEMIX_WARM_CACHE_ON_STARTUP=true
 EPYDEMIX_WARM_CACHE_POPULATIONS='["United_States", "Italy"]'
 ```
-
-## MCP workers
-
-MCP uses stateless Streamable HTTP. Initialization returns no session ID, and subsequent requests can reach any worker or replica. No per-client session dictionary is retained. The transport starts and stops with the application's lifespan.

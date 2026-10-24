@@ -1,4 +1,4 @@
-"""Real HTTP checks for worker independence and event-loop responsiveness."""
+"""Real HTTP checks for responsiveness during simulation execution."""
 
 import os
 import signal
@@ -7,16 +7,14 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
 import httpx
 import pytest
 
 
-@contextmanager
-def _live_server(tmp_path):
-    tmp_path.mkdir()
+@pytest.fixture
+def live_server(tmp_path):
     wrapper = tmp_path / "runtime_probe.py"
     wrapper.write_text("""
 import os
@@ -81,47 +79,7 @@ async def worker_pid(request, call_next):
         log.close()
 
 
-@pytest.fixture
-def live_servers(tmp_path, request):
-    with ExitStack() as stack:
-        yield [
-            stack.enter_context(_live_server(tmp_path / str(i)))
-            for i in range(getattr(request, "param", 1))
-        ]
-
-
-@pytest.mark.parametrize("live_servers", [2], indirect=True)
-def test_mcp_reconnects_across_actual_workers(live_servers):
-    headers = {"Accept": "application/json, text/event-stream"}
-    workers = set()
-    # Separate ports force worker changes without relying on OS connection scheduling.
-    for i in range(6):
-        method = "initialize" if i % 3 == 0 else "tools/call"
-        params = (
-            {
-                "protocolVersion": "2025-06-18",
-                "capabilities": {},
-                "clientInfo": {"name": "test", "version": "0"},
-            }
-            if method == "initialize"
-            else {"name": "health_check", "arguments": {}}
-        )
-        response = httpx.post(
-            live_servers[i % 2] + "/mcp",
-            headers=headers,
-            json={"jsonrpc": "2.0", "id": i, "method": method, "params": params},
-        )
-        assert response.status_code == 200, response.text
-        assert "error" not in response.json()
-        assert "mcp-session-id" not in response.headers
-        if method == "tools/call":
-            assert response.json()["result"]["isError"] is False
-        workers.add(response.headers["x-worker-pid"])
-    assert len(workers) == 2
-
-
-def test_health_responds_during_real_simulation_on_same_worker(live_servers):
-    live_server = live_servers[0]
+def test_health_responds_during_real_simulation_on_same_worker(live_server):
     payload = {
         "model": {"preset": "SIR"},
         "population": {
