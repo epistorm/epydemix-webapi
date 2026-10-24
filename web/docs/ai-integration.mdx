@@ -59,6 +59,8 @@ The endpoint is:
 https://epyscenario-api.isi.it/mcp
 ```
 
+The server uses stateless Streamable HTTP. Initialization returns no session ID, so later requests can reach any API worker or replica. The transport starts and stops with the application. Set `EPYDEMIX_MCP_ENABLED=false` to disable the endpoint.
+
 <Tabs groupId="mcp-client">
   <TabItem value="claude-desktop" label="Claude Desktop" default>
 
