@@ -10,7 +10,11 @@ from fastapi.openapi.models import Example
 
 from ....services.population_service import PopulationLoadTimeoutError
 from ....services.python_export import render_simulation_python
-from ....services.simulation_service import run_simulation
+from ....services.simulation_runtime import (
+    SimulationBusyError,
+    SimulationTimeoutError,
+    run_simulation,
+)
 from ...responses import PythonSourceResponse, python_source_response
 from ..schemas.simulation import SimulationRequest, SimulationResponse
 
@@ -122,7 +126,7 @@ SIMULATION_REQUEST_EXAMPLES: dict[str, Example] = {
     description="Execute an epidemic simulation with the specified configuration.",
     operation_id="run_simulation",
 )
-async def create_simulation(
+def create_simulation(
     request: SimulationRequest = Body(..., openapi_examples=SIMULATION_REQUEST_EXAMPLES),
 ) -> SimulationResponse:
     """Run an epidemic simulation.
@@ -152,6 +156,10 @@ async def create_simulation(
     """
     try:
         return run_simulation(request)
+    except SimulationBusyError as e:
+        raise HTTPException(status_code=503, detail=str(e), headers={"Retry-After": "1"})
+    except SimulationTimeoutError as e:
+        raise HTTPException(status_code=504, detail=str(e))
     except PopulationLoadTimeoutError as e:
         raise HTTPException(status_code=504, detail=str(e))
     except ValueError as e:
@@ -171,7 +179,7 @@ async def create_simulation(
     ),
     operation_id="export_simulation_python",
 )
-async def export_simulation_python(
+def export_simulation_python(
     request: SimulationRequest = Body(..., openapi_examples=SIMULATION_REQUEST_EXAMPLES),
 ) -> PythonSourceResponse:
     """Export a validated simulation request as executable Python."""

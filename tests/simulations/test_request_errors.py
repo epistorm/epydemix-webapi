@@ -137,24 +137,26 @@ def test_initial_compartment_error_names_model_compartments(client):
 
 
 def test_population_timeout_is_504(client, monkeypatch):
-    from app.services import simulation_service
+    from app.services import population_service
     from app.services.population_service import PopulationLoadTimeoutError
 
-    def timeout(*args):
+    def timeout(*args, **kwargs):
         raise PopulationLoadTimeoutError("United_States", 1)
 
-    monkeypatch.setattr(simulation_service, "setup_population", timeout)
+    monkeypatch.setattr(population_service, "get_simulation_population", timeout, raising=False)
     response = client.post("/api/v1/simulations", json=BASE)
     assert response.status_code == 504, response.text
 
 
+def _broken_worker(connection, request, population):
+    connection.send(("error", "RuntimeError: secret internal failure"))
+    connection.close()
+
+
 def test_internal_error_is_500_without_details(client, monkeypatch, caplog):
-    from app.services import simulation_service
+    from app.services import simulation_runtime
 
-    def broken(*args):
-        raise RuntimeError("secret internal failure")
-
-    monkeypatch.setattr(simulation_service, "process_results", broken)
+    monkeypatch.setattr(simulation_runtime, "_simulate", _broken_worker)
     response = client.post("/api/v1/simulations", json=BASE)
     assert response.status_code == 500
     assert "secret" not in response.text
