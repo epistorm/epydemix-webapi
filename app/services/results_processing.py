@@ -22,6 +22,7 @@ from ..api.v1.schemas.simulation import (
     TransitionResults,
 )
 from ..utils.column_utils import parse_column_name
+from ..utils.dates import format_date_axis
 
 DEFAULT_QUANTILES: list[float] = [0.025, 0.05, 0.25, 0.5, 0.75, 0.95, 0.975]
 
@@ -109,7 +110,7 @@ def extract_trajectories(
     TrajectoriesResults
         Trajectory data with hierarchical structure for each simulation run.
     """
-    dates = [pd.Timestamp(d).strftime("%Y-%m-%d") for d in results.dates]
+    dates = format_date_axis(results.dates)
 
     age_groups_filter = output_config.age_groups
 
@@ -119,6 +120,8 @@ def extract_trajectories(
         compartments: dict[str, dict[str, list[float]]] = {}
         for col_name, values in trajectory.compartments.items():
             base_name, age_group = parse_column_name(col_name, compartment_names)
+            if output_config.compartments is not None and base_name not in output_config.compartments:
+                continue
             if age_groups_filter is not None and age_group not in age_groups_filter:
                 continue
             if base_name not in compartments:
@@ -129,6 +132,8 @@ def extract_trajectories(
         transitions: dict[str, dict[str, list[float]]] = {}
         for col_name, values in trajectory.transitions.items():
             base_name, age_group = parse_column_name(col_name, transition_names)
+            if output_config.transitions is not None and base_name not in output_config.transitions:
+                continue
             if age_groups_filter is not None and age_group not in age_groups_filter:
                 continue
             if base_name not in transitions:
@@ -293,7 +298,7 @@ def process_results(
 
     # Get compartment quantiles (None lets epydemix use its default)
     comp_df = results.get_quantiles_compartments(quantiles=output_config.quantiles)
-    dates = [pd.Timestamp(d).strftime("%Y-%m-%d") for d in comp_df["date"].unique()]
+    dates = format_date_axis(comp_df["date"].unique())
 
     # Get the actual quantiles used (from the dataframe)
     quantiles_used = sorted(comp_df["quantile"].unique().tolist())
