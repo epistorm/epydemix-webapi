@@ -43,7 +43,7 @@ Requests that omit both `R0` and `transmission_rate` produce different results.
 To retain the previous transmission rate, pass `"transmission_rate": 0.3`
 explicitly. V-SEIR and V-SEIHR already default to `R0: 2.5`.
 
-See [Preset conversions and precedence](/docs/guides/model/parameters/overview#preset-conversions-and-precedence).
+See [Preset conversions and precedence](/guides/model/parameters/overview#preset-conversions-and-precedence).
 
 ## Input validation and HTTP errors
 
@@ -62,7 +62,7 @@ Clients must handle HTTP errors and read the response's `detail` field:
 | `500` | Unexpected internal error, with details kept in server logs |
 
 Successful simulations still return HTTP `200` with `"status": "completed"`.
-See [Errors](/docs/guides/running-a-simulation#errors) for the request constraints.
+See [Errors](/guides/running-a-simulation#errors) for the request constraints.
 
 ## Parameter warnings
 
@@ -74,7 +74,7 @@ explicit rate expression does not use the source, directly or through another
 expression.
 
 There is no warning when only a preset default is overridden or when the rate
-expression uses the supplied source. See [Warnings](/docs/guides/warnings) for
+expression uses the supplied source. See [Warnings](/guides/warnings) for
 examples and the warning fields.
 
 ## Documentation

@@ -31,7 +31,7 @@ import ReleaseHeader from '@site/src/components/ReleaseHeader';
 
 ### V-SEIHR default initial conditions
 
-If you omit `initial_conditions` on a `V-SEIHR` request, the API now seeds ~0.05% of each age group as `Infected` and puts the rest in `Susceptible`. The `_vax` branch starts at zero. See the new [Initial Conditions](/docs/guides/initial-conditions) page.
+If you omit `initial_conditions` on a `V-SEIHR` request, the API now seeds ~0.05% of each age group as `Infected` and puts the rest in `Susceptible`. The `_vax` branch starts at zero. See the new [Initial Conditions](/guides/initial-conditions) page.
 
 ### Resolved vaccination flows in metadata
 
@@ -63,7 +63,7 @@ A new page for trying simulations interactively is now available at [`/playgroun
 ## Documentation
 
 - Added information about initial conditions
-  - New [**Initial Conditions**](/docs/guides/initial-conditions) page covering the `percentage` (default) and `absolute` methods, when to pick each, and what the fallback behavior is for omitted blocks
-  - [Custom Models](/docs/guides/model/custom-models) example now includes an explicit `initial_conditions` block and notes the lack of a built-in default for custom presets
-- All model preset pages document `R0` and period-form parameters as alternatives to the rate forms ([SIR](/docs/guides/model/presets/sir), [SEIR](/docs/guides/model/presets/seir), [SIS](/docs/guides/model/presets/sis)).
+  - New [**Initial Conditions**](/guides/initial-conditions) page covering the `percentage` (default) and `absolute` methods, when to pick each, and what the fallback behavior is for omitted blocks
+  - [Custom Models](/guides/model/custom-models) example now includes an explicit `initial_conditions` block and notes the lack of a built-in default for custom presets
+- All model preset pages document `R0` and period-form parameters as alternatives to the rate forms ([SIR](/guides/model/presets/sir), [SEIR](/guides/model/presets/seir), [SIS](/guides/model/presets/sis)).
 - Documentation refinement: the sidebar can be collapsed with a toggle button; frontend dependency updates

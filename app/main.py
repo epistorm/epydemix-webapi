@@ -137,7 +137,7 @@ async def health_check() -> HealthResponse:
 _API_BASE = settings.api_v1_prefix
 
 
-_DOCS_BASE = "https://epydemix-webapi.vercel.app"
+_DOCS_BASE = "https://docs.api.epydemix.org"
 
 
 def _link_header() -> str:
@@ -268,7 +268,7 @@ async def mcp_server_card() -> Response:
             "tools": {"listChanged": False},
         },
         "links": {
-            "documentation": f"{_DOCS_BASE}/docs/ai-integration",
+            "documentation": f"{_DOCS_BASE}/ai-integration",
             "openapi": f"{_API_BASE}/openapi.json",
         },
     }

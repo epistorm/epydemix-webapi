@@ -10,7 +10,7 @@
       ],
       "service-doc": [
         {
-          "href": "https://epydemix-webapi.vercel.app/api-reference",
+          "href": "https://docs.api.epydemix.org/api-reference",
           "type": "text/html"
         },
         {
@@ -26,13 +26,13 @@
       ],
       "https://llmstxt.org/": [
         {
-          "href": "https://epydemix-webapi.vercel.app/llms.txt",
+          "href": "https://docs.api.epydemix.org/llms.txt",
           "type": "text/markdown"
         }
       ],
       "https://llmstxt.org/full": [
         {
-          "href": "https://epydemix-webapi.vercel.app/llms-full.txt",
+          "href": "https://docs.api.epydemix.org/llms-full.txt",
           "type": "text/markdown"
         }
       ],

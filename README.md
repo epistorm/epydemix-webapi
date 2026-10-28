@@ -2,7 +2,7 @@
 
 REST API for running epidemic simulations on [epydemix](https://github.com/epistorm/epydemix).
 
-Documentation and API reference: https://epydemix-webapi.vercel.app/docs
+Documentation and API reference: https://docs.api.epydemix.org
 
 ## Quick Start
 
@@ -63,6 +63,6 @@ curl -X POST http://localhost:8000/api/v1/simulations \
 
 ## Documentation
 
-API documentation and reference is available [here](https://epydemix-webapi.vercel.app/docs).
+API documentation and reference is available [here](https://docs.api.epydemix.org).
 
 Most API parameters follow epydemix conventions. Refer to the [epydemix documentation](https://epydemix.readthedocs.io/en/latest/) for details on model parameters, population data, and simulation options.

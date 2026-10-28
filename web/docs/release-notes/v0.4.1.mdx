@@ -30,7 +30,7 @@ The API now exposes itself as a Model Context Protocol server at:
 https://epyscenario-api.isi.it/mcp
 ```
 
-Setup snippets for each client are in the new [AI Integration](https://epydemix-webapi.vercel.app/docs/ai-integration) docs page.
+Setup snippets for each client are in the new [AI Integration](https://docs.api.epydemix.org/ai-integration) docs page.
 The MCP layer can be disabled per deployment with `EPYDEMIX_MCP_ENABLED=false`. An MCP Server Card (SEP-1649) is also published at `/.well-known/mcp/server-card.json` for agent discovery.
 
 ### llms.txt and llms-full.txt
@@ -47,10 +47,10 @@ When the docs site receives `Accept: text/markdown`, it returns the markdown sou
 
 ```bash
 # HTML (default for browsers)
-curl https://epydemix-webapi.vercel.app/docs/intro
+curl https://docs.api.epydemix.org/
 
 # Markdown (for AI agents)
-curl -H 'Accept: text/markdown' https://epydemix-webapi.vercel.app/docs/intro
+curl -H 'Accept: text/markdown' https://docs.api.epydemix.org/
 ```
 
 `Vary: Accept` is set so caches keep both representations separate.
@@ -61,7 +61,7 @@ Every doc page now has a combo widget at the top right with two click zones:
 - **Copy page**: copies the page as markdown to the clipboard
 - **Open in chat**: dropdown for **Open Markdown** / **Open in Claude** / **Open in ChatGPT**, each opening a new tab with the page URL prefilled in the prompt
 
-Driven by per-page markdown mirrors at `/docs/<path>.md` that the same script writes alongside `llms-full.txt`.
+Driven by per-page markdown mirrors at `/<path>.md` that the same script writes alongside `llms-full.txt`.
 
 ## Simulations
 

@@ -14,7 +14,7 @@ const config: Config = {
   tagline: 'REST API for epidemic simulations',
   favicon: undefined,
 
-  url: 'https://epydemix-webapi.vercel.app',
+  url: 'https://docs.api.epydemix.org',
   baseUrl: '/',
 
   onBrokenLinks: 'warn',
@@ -44,6 +44,7 @@ const config: Config = {
       'classic',
       {
         docs: {
+          routeBasePath: '/',
           sidebarPath: './sidebars.ts',
           editUrl: 'https://github.com/epistorm/epydemix-webapi/blob/main/web/',
           sidebarCollapsible: false,
@@ -160,7 +161,7 @@ const config: Config = {
         {
           title: 'Docs',
           items: [
-            {label: 'Introduction', to: '/docs'},
+            {label: 'Introduction', to: '/'},
             {label: 'API Reference', to: '/api-reference'},
           ],
         },

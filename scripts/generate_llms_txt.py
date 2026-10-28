@@ -24,9 +24,9 @@ from pathlib import Path
 DOCS_DIR = Path(__file__).resolve().parents[1] / "web" / "docs"
 STATIC_DIR = Path(__file__).resolve().parents[1] / "web" / "static"
 OUTPUT = STATIC_DIR / "llms-full.txt"
-# Per-page markdown copies are written under web/static/docs/<path>.md so they
-# serve at /docs/<path>.md on the docs site (a plain mirror of each MDX page).
-PER_PAGE_DIR = STATIC_DIR / "docs"
+# Per-page markdown copies are written under web/static/<path>.md so they
+# serve at /<path>.md on the docs site (a plain mirror of each MDX page).
+PER_PAGE_DIR = STATIC_DIR
 
 # Strip the YAML frontmatter at the top of the file.
 _FRONTMATTER_RE = re.compile(r"\A---\n.*?\n---\n+", re.DOTALL)
@@ -56,7 +56,7 @@ def _clean(text: str) -> str:
 
 
 def _per_page_path(rel_doc_path: str) -> Path:
-    """Map ``intro.md`` → ``static/docs/intro.md``, ``guides/foo.mdx`` → ``static/docs/guides/foo.md``."""
+    """Map ``intro.md`` → ``static/intro.md``, ``guides/foo.mdx`` → ``static/guides/foo.md``."""
     p = Path(rel_doc_path)
     return PER_PAGE_DIR / p.with_suffix(".md")
 
@@ -77,7 +77,7 @@ def main() -> None:
     parts: list[str] = [
         "# epydemix WebAPI — full documentation",
         "",
-        "Concatenated from the docs site. See https://epydemix-webapi.vercel.app/docs"
+        "Concatenated from the docs site. See https://docs.api.epydemix.org"
         " for the rendered version with navigation.",
         "",
         "---",
@@ -98,7 +98,7 @@ def main() -> None:
             parts.append("")
             bundle_count += 1
 
-        # 2) Write a per-page mirror at /docs/<path>.md for every page,
+        # 2) Write a per-page mirror at /<path>.md for every page,
         #    including the bundle-skipped ones, so the in-page widget works.
         per_page = _per_page_path(rel)
         per_page.parent.mkdir(parents=True, exist_ok=True)

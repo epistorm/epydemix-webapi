@@ -17,27 +17,27 @@ The API is built so AI tools can use it directly. Two options, depending on how 
 To get help from an AI assistant in a regular chat, paste one of these resources into the prompt so it has accurate, up-to-date context about the API:
 
 - **OpenAPI spec** [`/openapi.json`](https://epyscenario-api.isi.it/api/v1/openapi.json): every endpoint with field types and example values, ideal when you want help **building requests**.
-- **Docs summary** [`/llms.txt`](https://epydemix-webapi.vercel.app/llms.txt) (~30 lines): short index of every doc page, good for general questions.
-- **Full docs** [`/llms-full.txt`](https://epydemix-webapi.vercel.app/llms-full.txt) (~30 KB): every doc page concatenated, ideal for grounding deeper questions or for RAG ingestion.
+- **Docs summary** [`/llms.txt`](https://docs.api.epydemix.org/llms.txt) (~30 lines): short index of every doc page, good for general questions.
+- **Full docs** [`/llms-full.txt`](https://docs.api.epydemix.org/llms-full.txt) (~30 KB): every doc page concatenated, ideal for grounding deeper questions or for RAG ingestion.
 
 Example prompts (use the copy button on each block):
 
 ```text
 Using the OpenAPI spec, build an example JSON request for the SIR compartmental model with the United_States demographic dataset over a 6-month time window. This is for a numerical modeling exercise; only the request body is needed.
-Docs: https://epydemix-webapi.vercel.app/llms.txt
+Docs: https://docs.api.epydemix.org/llms.txt
 OpenAPI spec: https://epyscenario-api.isi.it/api/v1/openapi.json
 ```
 
 ```text
 Using the docs provided, explain how the parameter_transforms field of this compartmental-model API works and show one minimal example request body for each method (balcan, scale, override).
-Docs: https://epydemix-webapi.vercel.app/llms.txt
+Docs: https://docs.api.epydemix.org/llms.txt
 OpenAPI spec: https://epyscenario-api.isi.it/api/v1/openapi.json
 ```
 
 ```text
 Using the OpenAPI spec, generate a Python script using `requests` that runs the SIR simulation and prints the peak value of the new infection transitions from the median trajectory.
 This is a textbook SIR exercise on a synthetic demographic dataset.
-Docs: https://epydemix-webapi.vercel.app/llms.txt
+Docs: https://docs.api.epydemix.org/llms.txt
 OpenAPI spec: https://epyscenario-api.isi.it/api/v1/openapi.json
 ```
 

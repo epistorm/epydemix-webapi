@@ -6,26 +6,26 @@ The API is JSON-based, exposes an OpenAPI 3.1 spec, and returns responses as JSO
 
 ## Docs
 
-- [Introduction](https://epydemix-webapi.vercel.app/docs/intro): what the API is, why it exists
-- [Running a Simulation](https://epydemix-webapi.vercel.app/docs/guides/running-a-simulation): end-to-end tutorial showing how to send a JSON request and read the numerical response
-- [Populations](https://epydemix-webapi.vercel.app/docs/guides/populations): age-structured demographic datasets and contact-matrix references for the model
-- [Model Presets](https://epydemix-webapi.vercel.app/docs/guides/model/presets): built-in SIR, SEIR, and SIS textbook compartmental models
-- [Custom Models](https://epydemix-webapi.vercel.app/docs/guides/model/custom-models): user-defined compartments and transition rules
-- [Parameters](https://epydemix-webapi.vercel.app/docs/guides/model/parameters): scalar and age-varying model parameter values
-- [Parameter Transforms](https://epydemix-webapi.vercel.app/docs/guides/parameter-transforms): time-varying parameter modifiers, including Balcan-style sinusoidal seasonality, multiplicative scaling, and absolute overrides
-- [FAQ](https://epydemix-webapi.vercel.app/docs/faq): common how-to questions
+- [Introduction](https://docs.api.epydemix.org/): what the API is, why it exists
+- [Running a Simulation](https://docs.api.epydemix.org/guides/running-a-simulation): end-to-end tutorial showing how to send a JSON request and read the numerical response
+- [Populations](https://docs.api.epydemix.org/guides/populations): age-structured demographic datasets and contact-matrix references for the model
+- [Model Presets](https://docs.api.epydemix.org/guides/model/presets): built-in SIR, SEIR, and SIS textbook compartmental models
+- [Custom Models](https://docs.api.epydemix.org/guides/model/custom-models): user-defined compartments and transition rules
+- [Parameters](https://docs.api.epydemix.org/guides/model/parameters): scalar and age-varying model parameter values
+- [Parameter Transforms](https://docs.api.epydemix.org/guides/parameter-transforms): time-varying parameter modifiers, including Balcan-style sinusoidal seasonality, multiplicative scaling, and absolute overrides
+- [FAQ](https://docs.api.epydemix.org/faq): common how-to questions
 
 ## API
 
-- [Interactive API reference](https://epydemix-webapi.vercel.app/api-reference): Scalar UI for browsing and testing endpoints
+- [Interactive API reference](https://docs.api.epydemix.org/api-reference): Scalar UI for browsing and testing endpoints
 - [Health check](https://epyscenario-api.isi.it/api/v1/health): liveness probe with API and epydemix versions
-- [API catalog](https://epydemix-webapi.vercel.app/.well-known/api-catalog): RFC 9727 linkset listing the spec, docs, status, and MCP endpoints
+- [API catalog](https://docs.api.epydemix.org/.well-known/api-catalog): RFC 9727 linkset listing the spec, docs, status, and MCP endpoints
 - [MCP server](https://epyscenario-api.isi.it/mcp): Model Context Protocol endpoint exposing the API's operations as tool calls for agents (Claude Desktop, Cursor, etc.)
 
 ## Full content
 
 - [OpenAPI 3.1 spec](https://epyscenario-api.isi.it/api/v1/openapi.json): machine-readable JSON spec covering every endpoint, request/response schema, and example value; the authoritative reference for building requests
-- [llms-full.txt](https://epydemix-webapi.vercel.app/llms-full.txt): all docs concatenated as a single markdown file, suitable for RAG ingestion
+- [llms-full.txt](https://docs.api.epydemix.org/llms-full.txt): all docs concatenated as a single markdown file, suitable for RAG ingestion
 
 ## Optional
 
