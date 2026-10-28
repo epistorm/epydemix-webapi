@@ -41,9 +41,9 @@
 }
 
 .button.active {
-  background: var(--ifm-color-primary);
-  border-color: var(--ifm-color-primary);
-  color: #fff;
+  background: var(--button-fill-background);
+  border-color: var(--button-fill-background);
+  color: var(--button-fill-color);
 }
 
 .input {

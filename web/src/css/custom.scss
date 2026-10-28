@@ -1,37 +1,109 @@
 :root {
-  --ifm-color-primary: #0054c2;
-  --ifm-color-primary-dark: #004caf;
-  --ifm-color-primary-darker: #00479e;
-  --ifm-color-primary-darkest: #003a82;
-  --ifm-color-primary-light: #005cd5;
-  --ifm-color-primary-lighter: #0061e0;
-  --ifm-color-primary-lightest: #1a72f5;
+  // Palette and fonts follow https://www.epydemix.org/.
+  --ifm-color-primary: #165283;
+  --ifm-color-primary-dark: #144a76;
+  --ifm-color-primary-darker: #13466f;
+  --ifm-color-primary-darkest: #0f395c;
+  --ifm-color-primary-light: #185a90;
+  --ifm-color-primary-lighter: #195e97;
+  --ifm-color-primary-lightest: #1d6baa;
+  --ifm-font-family-base: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  /* Infima's gray scale is blue-tinted; swap in the palette neutrals. Every
+   * --ifm-color-emphasis-* (borders, hovers) maps onto these in both themes. */
+  --ifm-color-gray-100: #f5f5f5;
+  --ifm-color-gray-200: #e8e8e8;
+  --ifm-color-gray-300: #d4d4d4;
+  --ifm-color-gray-400: #c4c4c4;
+  --ifm-color-gray-500: #b0b0b0;
+  --ifm-color-gray-600: #919191;
+  --ifm-color-gray-700: #666;
+  --ifm-color-gray-800: #3b3b3b;
+  --ifm-color-gray-900: #1c1c1c;
+  --ifm-hover-overlay: var(--ifm-color-emphasis-100);
+  /* Filled (selected / primary) buttons */
+  --button-fill-background: var(--ifm-color-emphasis-200);
+  --button-fill-color: var(--ifm-font-color-base);
   --ifm-global-shadow-lw: 0;
   --ifm-global-shadow-md: 0;
   --ifm-global-shadow-tl: 0;
 }
 
-[data-theme='light'] {
-  --prism-background-color: #f5f5f5;
-  --codeblock-border-color: #e0e0e0;
+:root[data-theme='light'] {
+  --codeblock-border-color: #e8e8e8;
   --ifm-navbar-background-color: #fff;
 }
 
-[data-theme='dark'] {
-  --ifm-color-primary: #29b8ff;
-  --ifm-background-color: #0a0a0a;
-  --ifm-navbar-background-color: #0a0a0a;
-  --ifm-footer-background-color: #0f0f0f;
-  --prism-background-color: #42424229;
-  --codeblock-border-color: #404040;
+/* `:root[...]` outranks Infima's own `html[data-theme=dark]` block. */
+:root[data-theme='dark'] {
+  --ifm-color-primary: #49cab9;
+  --ifm-color-primary-dark: #38c0ae;
+  --ifm-color-primary-darker: #35b5a4;
+  --ifm-color-primary-darkest: #2b9587;
+  --ifm-color-primary-light: #5ed0c1;
+  --ifm-color-primary-lighter: #69d3c5;
+  --ifm-color-primary-lightest: #89ddd2;
+  --ifm-background-color: #121212;
+  --ifm-navbar-background-color: #121212;
+  --codeblock-border-color: #3b3b3b;
+  --ifm-hover-overlay: var(--ifm-color-emphasis-100);
 }
 
 html {
   scroll-behavior: smooth;
 }
 
+/* Sidebar / TOC / code scrollbars. Chrome ignores Infima's ::-webkit-scrollbar
+ * colors once `scrollbar-width` is set, so give it the standard property. */
+.thin-scrollbar {
+  scrollbar-color: var(--ifm-color-emphasis-300) transparent;
+}
+
+/* Underline links in body text */
+.markdown a {
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.markdown a.hash-link {
+  text-decoration: none;
+}
+
+/* DocSearch: swap its indigo-tinted defaults for the palette. The emphasis
+ * scale flips with the theme, so one block covers light and dark. `:root[...]`
+ * outranks DocSearch's own `html[data-theme=dark]` block, which loads later. */
+:root[data-theme='light'],
+:root[data-theme='dark'] {
+  --docsearch-primary-color: var(--ifm-color-primary);
+  --docsearch-highlight-color: var(--ifm-color-primary);
+  --docsearch-focus-color: var(--ifm-color-primary);
+  --docsearch-logo-color: var(--ifm-color-primary);
+  --docsearch-soft-primary-color: color-mix(in srgb, var(--ifm-color-primary) 10%, transparent);
+  --docsearch-hit-highlight-color: color-mix(in srgb, var(--ifm-color-primary) 10%, transparent);
+  --docsearch-text-color: var(--ifm-font-color-base);
+  --docsearch-secondary-text-color: var(--ifm-color-emphasis-700);
+  --docsearch-icon-color: var(--ifm-color-emphasis-700);
+  --docsearch-muted-color: var(--ifm-color-emphasis-600);
+  --docsearch-muted-color-darker: color-mix(in srgb, var(--ifm-color-emphasis-600) 25%, transparent);
+  --docsearch-subtle-color: var(--ifm-color-emphasis-300);
+  --docsearch-background-color: var(--ifm-color-emphasis-100);
+  --docsearch-key-background: var(--ifm-color-emphasis-100);
+  --docsearch-key-color: var(--ifm-color-emphasis-700);
+  --docsearch-modal-background: var(--ifm-color-emphasis-100);
+  --docsearch-hit-background: var(--ifm-background-color);
+  --docsearch-hit-color: var(--ifm-font-color-base);
+  --docsearch-search-button-background: var(--ifm-background-color);
+  --docsearch-search-button-text-color: var(--ifm-color-emphasis-700);
+  --docsearch-container-background: rgba(10, 10, 10, 0.6);
+  --docsearch-modal-shadow: 0 12px 28px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.1);
+  --docsearch-footer-background: var(--ifm-color-emphasis-100);
+  --docsearch-footer-shadow: 0 -1px 0 0 var(--ifm-color-emphasis-200);
+  --docsearch-key-pressed-shadow: none;
+}
+
 /* Typography */
 h1 {
+  font-family: var(--font-display);
   font-size: 1.8rem;
 }
 
@@ -53,6 +125,33 @@ code {
 .navbar {
   box-shadow: none;
   border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.navbar__brand {
+  padding-left: 0.375rem;
+  margin-right: 1.75rem;
+}
+
+/* Wordmark, after the Web API card on https://www.epydemix.org/tools */
+.navbar__title {
+  font-family: var(--font-display);
+  color: #165283;
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.navbar__title::after {
+  content: ' web API';
+  white-space: pre;
+  color: #666;
+}
+
+[data-theme='dark'] .navbar__title {
+  color: var(--ifm-color-primary);
+}
+
+[data-theme='dark'] .navbar__title::after {
+  color: #919191;
 }
 
 .navbar__items .navbar-github-link {
@@ -100,9 +199,19 @@ code {
   font-size: 0.85rem;
 }
 
-/* Footer */
-[data-theme='dark'] .footer {
-  background-color: #0f0f0f;
+/* Footer: the epydemix.org navy in light mode, neutral in dark mode */
+.footer--dark {
+  --ifm-footer-background-color: #0c2246;
+  --ifm-footer-color: #ffffffb3;
+  --ifm-footer-title-color: #fff;
+  --ifm-footer-link-color: #fff;
+  --ifm-footer-link-hover-color: #12bce2;
+}
+
+[data-theme='dark'] .footer--dark {
+  --ifm-footer-background-color: var(--ifm-color-emphasis-100);
+  --ifm-footer-link-hover-color: var(--ifm-color-primary);
+  border-top: 1px solid var(--ifm-color-emphasis-200);
 }
 
 /* Center figures and tables in doc pages */

@@ -111,8 +111,8 @@
 
 .runBtn {
   height: 30px;
-  background: var(--ifm-color-primary);
-  color: white;
+  background: var(--button-fill-background);
+  color: var(--button-fill-color);
   border: none;
   padding: 0 0.9rem;
   border-radius: 4px;

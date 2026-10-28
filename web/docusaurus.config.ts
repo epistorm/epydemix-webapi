@@ -1,4 +1,4 @@
-import {themes as prismThemes} from 'prism-react-renderer';
+import type {PrismTheme} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import remarkMath from 'remark-math';
@@ -8,6 +8,30 @@ import dotenv from 'dotenv';
 // Load .env.local for local dev. Vercel injects its own env vars at build
 // time, so the file's absence on production builds is fine (no-op).
 dotenv.config({path: '.env.local'});
+
+// Code block colors from the epydemix.org palette. Docs code is almost all
+// JSON and bash, so a handful of token groups covers it.
+function paletteCodeTheme(c: {
+  background: string;
+  text: string;
+  key: string;
+  string: string;
+  number: string;
+  muted: string;
+  comment: string;
+}): PrismTheme {
+  return {
+    plain: {color: c.text, backgroundColor: c.background},
+    styles: [
+      {types: ['comment', 'prolog', 'doctype', 'cdata'], style: {color: c.comment, fontStyle: 'italic'}},
+      {types: ['punctuation', 'operator'], style: {color: c.muted}},
+      {types: ['property', 'keyword', 'function', 'builtin', 'tag', 'selector'], style: {color: c.key}},
+      {types: ['string', 'char', 'attr-value', 'url'], style: {color: c.string}},
+      {types: ['number', 'boolean', 'constant', 'null', 'symbol'], style: {color: c.number}},
+      {types: ['variable', 'parameter', 'attr-name'], style: {color: c.text}},
+    ],
+  };
+}
 
 const config: Config = {
   title: 'epydemix Web API',
@@ -31,6 +55,10 @@ const config: Config = {
       integrity:
         'sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV',
       crossorigin: 'anonymous',
+    },
+    {
+      href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap',
+      type: 'text/css',
     },
   ],
 
@@ -125,7 +153,8 @@ const config: Config = {
       },
     },
     navbar: {
-      title: 'epydemix Web API',
+      // "web API" is appended in custom.scss to match the epydemix.org wordmark.
+      title: 'epydemix',
       items: [
         {
           type: 'docSidebar',
@@ -173,11 +202,27 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} Minami Ueda.`,
+      copyright: `Copyright © ${new Date().getFullYear()} Epydemix.`,
     },
     prism: {
-      theme: prismThemes.github,
-      darkTheme: prismThemes.dracula,
+      theme: paletteCodeTheme({
+        background: '#f5f5f5',
+        text: '#0a0a0a',
+        key: '#165283',
+        string: '#006b5f',
+        number: '#0a6f8a',
+        muted: '#666',
+        comment: '#919191',
+      }),
+      darkTheme: paletteCodeTheme({
+        background: '#1c1c1c',
+        text: '#e8e8e8',
+        key: '#3590db',
+        string: '#3ea8a5',
+        number: '#12bce2',
+        muted: '#919191',
+        comment: '#666',
+      }),
       additionalLanguages: ['bash', 'json', 'json5', 'python', 'hcl'],
     },
     // Algolia DocSearch. Credentials come from environment variables so the
