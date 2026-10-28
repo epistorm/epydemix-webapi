@@ -37,4 +37,4 @@ Allow: /
 User-agent: CCBot
 Allow: /
 
-Sitemap: https://epydemix-webapi.vercel.app/sitemap.xml
+Sitemap: https://docs.api.epydemix.org/sitemap.xml

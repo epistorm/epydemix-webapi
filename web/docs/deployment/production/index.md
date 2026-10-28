@@ -33,4 +33,4 @@ count, otherwise requests queue on an overloaded instance instead of scaling out
 
 ## Environment variables
 
-See [Configuration](/docs/reference/configuration) for all available settings.
+See [Configuration](/reference/configuration) for all available settings.

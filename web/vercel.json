@@ -2,7 +2,19 @@
   "framework": "docusaurus-2",
   "installCommand": "bun install",
   "redirects": [
-    { "source": "/", "destination": "/docs", "permanent": true }
+    {
+      "source": "/docs/:path*",
+      "has": [{ "type": "host", "value": "epydemix-webapi.vercel.app" }],
+      "destination": "https://docs.api.epydemix.org/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "epydemix-webapi.vercel.app" }],
+      "destination": "https://docs.api.epydemix.org/:path*",
+      "permanent": true
+    },
+    { "source": "/docs/:path*", "destination": "/:path*", "permanent": true }
   ],
   "rewrites": [
     {
@@ -30,7 +42,7 @@
       ]
     },
     {
-      "source": "/(docs.*)?",
+      "source": "/(.*)",
       "headers": [
         {
           "key": "Link",

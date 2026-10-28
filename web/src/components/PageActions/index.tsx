@@ -37,9 +37,10 @@ const EXTERNAL_ICON = (
 );
 
 function pageMarkdownUrl(pathname: string): string {
-  // Strip trailing slash, append .md. Docusaurus serves /docs/foo, mirrors live at /docs/foo.md.
+  // Strip trailing slash, append .md. Docusaurus serves /foo, mirrors live at /foo.md.
+  // The intro page is the site root, so its mirror is /intro.md.
   const clean = pathname.replace(/\/+$/, '');
-  return `${clean}.md`;
+  return `${clean || '/intro'}.md`;
 }
 
 function PageActionsInner() {

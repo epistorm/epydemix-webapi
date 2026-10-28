@@ -34,7 +34,7 @@ Each campaign's `rollout` block now accepts a new type `fixed_rate`, in addition
 
 Inside the campaign window this is identical to a spontaneous transition at `rate`: every individual in a source compartment (restricted to `target_age_groups`) has a per-day probability of `1 - exp(-rate * dt)` of moving to the target.
 
-See the [Campaigns guide](/docs/guides/vaccination/campaigns#fixed-rate-per-day-hazard) for the worked example and the [fixed_rate playground template](/playground) for a V-SEIHR setup.
+See the [Campaigns guide](/guides/vaccination/campaigns#fixed-rate-per-day-hazard) for the worked example and the [fixed_rate playground template](/playground) for a V-SEIHR setup.
 
 ### New per-campaign `coverage` cap
 
@@ -49,7 +49,7 @@ Each campaign now accepts an optional `coverage` block that stops the campaign o
 
 Once the summed current occupancy of `compartments`, restricted to the campaign's `target_age_groups`, reaches `fraction * initial_population`, the campaign stops contributing to the rate. The cap composes with both `flat_count` and `fixed_rate`, and is independent per campaign.
 
-See the [Coverage cap section](/docs/guides/vaccination/campaigns#coverage-cap) of the Campaigns guide for details and validation rules.
+See the [Coverage cap section](/guides/vaccination/campaigns#coverage-cap) of the Campaigns guide for details and validation rules.
 
 
 ## Playground
@@ -58,4 +58,4 @@ See the [Coverage cap section](/docs/guides/vaccination/campaigns#coverage-cap) 
 
 ## Documentation
 
-- New "Fixed rate (per-day hazard)" and "Coverage cap" sections in the [Campaigns guide](/docs/guides/vaccination/campaigns).
+- New "Fixed rate (per-day hazard)" and "Coverage cap" sections in the [Campaigns guide](/guides/vaccination/campaigns).

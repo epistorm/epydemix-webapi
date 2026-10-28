@@ -35,7 +35,7 @@ Vaccinated infectious individuals transmit at the *same* per-contact rate as unv
 
 Without a `vaccination` block the vaccinated branch stays at zero for the whole run and V-SEIHR behaves like plain SEIHR.
 
-See the [V-SEIHR preset page](/docs/guides/model/presets/v-seihr) for the full transition table, ODE form, parameter reference, and examples.
+See the [V-SEIHR preset page](/guides/model/presets/v-seihr) for the full transition table, ODE form, parameter reference, and examples.
 
 ### Vaccination block
 
@@ -69,13 +69,13 @@ $$
 
 Each transitioning flow surfaces as a regular transition in the response (e.g. `Susceptible_to_Susceptible_vax` under `results.transitions.data`); flows with dose sinks emit no transition. The request is echoed back under `metadata.vaccination` with the resolved `flows` list.
 
-See the [Vaccination overview](/docs/guides/vaccination/overview) and [Campaigns page](/docs/guides/vaccination/campaigns) for the full details and custom-model usage.
+See the [Vaccination overview](/guides/vaccination/overview) and [Campaigns page](/guides/vaccination/campaigns) for the full details and custom-model usage.
 
 ## Documentation
 
-- New **Vaccination** guide category with [Overview](/docs/guides/vaccination/overview) (rate calculation, flows, dose allocation, vaccine efficacy, inspecting the rollout) and [Campaigns](/docs/guides/vaccination/campaigns) (per-campaign fields, rollout strategies, multi-campaign stacking, custom-model usage)
-- New [V-SEIHR preset page](/docs/guides/model/presets/v-seihr) with compartments, transitions, equivalent ODE form, vaccine-efficacy math, parameter table, and three curl examples (with vaccination, without vaccination, with seasonality)
-- Model presets split into per-preset pages under `guides/model/presets/` ([SIR](/docs/guides/model/presets/sir), [SEIR](/docs/guides/model/presets/seir), [SIS](/docs/guides/model/presets/sis), [V-SEIHR](/docs/guides/model/presets/v-seihr))
+- New **Vaccination** guide category with [Overview](/guides/vaccination/overview) (rate calculation, flows, dose allocation, vaccine efficacy, inspecting the rollout) and [Campaigns](/guides/vaccination/campaigns) (per-campaign fields, rollout strategies, multi-campaign stacking, custom-model usage)
+- New [V-SEIHR preset page](/guides/model/presets/v-seihr) with compartments, transitions, equivalent ODE form, vaccine-efficacy math, parameter table, and three curl examples (with vaccination, without vaccination, with seasonality)
+- Model presets split into per-preset pages under `guides/model/presets/` ([SIR](/guides/model/presets/sir), [SEIR](/guides/model/presets/seir), [SIS](/guides/model/presets/sis), [V-SEIHR](/guides/model/presets/v-seihr))
 - Parameter docs grouped under `guides/model/parameters/` with an Overview and a dedicated Transformations page
 - Updated FAQ with cleaner structure
 - Added full text search
